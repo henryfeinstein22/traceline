@@ -170,13 +170,15 @@ const LITERACY_TIPS = {
     "AI tip: I can sound confident even when I'm wrong — that's called a \"hallucination.\" Always verify facts that matter with a trusted source.",
     "AI tip: using me to help you think through a problem builds your skills more than just asking for the final answer.",
     "AI tip: I can help you weigh options, but I don't know things about your life that matter — like how tired you are or what you promised a friend. You make the call.",
-    "AI tip: try tapping \"How do you know that?\" under one of my answers — asking me to explain my reasoning, or checking with a second source, catches mistakes a lot better than just trusting the first answer.",
+    "AI tip: try tapping \"How do you know that?\" under one of my answers — asking me to explain my reasoning, or checking with a teacher, librarian, or trusted expert (not just another AI), catches mistakes a lot better than just trusting the first answer.",
+    "AI tip: if I'm helping you think through spending money — like whether to buy something now and pay for it later in parts — remember I don't know your actual budget or what else you're saving for. That's worth checking with a parent before deciding.",
   ],
   high: [
     "AI tip: I predict text based on patterns in training data — that's different from reasoning the way a person does, even when the output looks similar.",
     "AI tip: I can be confidently wrong (a \"hallucination\"). For anything that matters — a grade, a fact in an essay, a decision — verify with a primary source.",
     "AI tip: how you prompt me changes the answer a lot. Specific, well-scoped questions get better results than vague ones.",
     "AI tip: using AI to think through a decision is different from using AI to make the decision for you. The habit of deciding for yourself is a skill worth keeping.",
+    "AI tip: \"buy now, pay later\" and similar options can make a purchase feel smaller than it actually is by splitting it up. If I'm helping you weigh a purchase, ask what the real total cost is before deciding.",
   ],
 };
 
