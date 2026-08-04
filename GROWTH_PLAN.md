@@ -2,6 +2,10 @@
 
 Written 2026-08-04, based on the product's actual current state (not aspirational). Updated further by the "Traceline strategy digest" recurring job — check for newer entries below this line when reviewing.
 
+## Update (same day): classroom-first is now the committed direction, not just an option
+
+Explicit decision: build Traceline around the classroom-infrastructure thesis specifically, not treat it as one of three roughly-equal monetization paths. Grounded in a new tracked Signal Broker call: AI becoming standard, assumed K-12 classroom infrastructure (like calculators/the internet, not a fringe or banned tool) by 2029, estimated 63% — see https://signal-broker-production.up.railway.app. The landing page now gives the classroom/teacher CTA equal visual weight to the family CTA, not a nav-only afterthought. This doesn't change the underlying honest assessment below (still one real family, still unproven demand) — it changes what "prove demand" should mean going forward: the highest-priority next real-world test is one pilot teacher actually using the classroom code with a real class, not more family signups.
+
 ## Is this a business or a side project? Be honest first.
 
 Right now: one real family using it (you), a working product, zero paying customers, zero real external users. That's not a business yet — it's a validated mechanism (per the one-pager's own framing) with an unproven demand bet. The single most important thing between here and "business" isn't another feature — it's getting real strangers to use it and seeing if they come back. Everything below is in service of that, not a replacement for it.
