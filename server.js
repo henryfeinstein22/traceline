@@ -33,8 +33,14 @@ function hash(pass) {
   return crypto.createHash('sha256').update(pass).digest('hex');
 }
 
+// IDs double as the only access control on lookups like GET /api/conversations/:id
+// (no auth on that route) — they must be unguessable, not just unique. A
+// timestamp + 3-digit-random suffix is brute-forceable within a known time
+// window, which would let someone with a rough idea of when a conversation
+// was created enumerate its ID and read flagged content (self-harm language,
+// personal info) meant only for that family.
 function newId(prefix) {
-  return prefix + Date.now() + Math.floor(Math.random() * 1000);
+  return prefix + crypto.randomBytes(12).toString('hex');
 }
 
 // --- Safety filtering: MVP rule-based check only. -----------------------
