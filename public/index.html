@@ -87,7 +87,37 @@
     <a class="btn" href="parent.html">Set up a family →</a>
   </div>
 
-  <p class="note">The AI is live (Claude Haiku) across all three chat modes. Safety flagging combines keyword matching with a second pass over the AI's own responses to catch crisis language keywords miss — still not production-grade moderation, but two layers instead of one. Logging, consent, dashboard, and provenance are all real and fully functional.</p>
+  <div class="panel">
+    <h2>Not ready to set up a family yet?</h2>
+    <p style="margin-top:0; color:var(--ink-soft); font-size:14px;">Leave your email and we'll let you know as Traceline adds features — no account, no commitment.</p>
+    <div id="interestForm" style="display:flex; gap:8px; flex-wrap:wrap;">
+      <input type="text" id="interestEmail" placeholder="you@example.com" style="flex:1; min-width:200px;">
+      <button class="btn secondary" onclick="submitInterest()">Notify me</button>
+    </div>
+    <div id="interestMsg" style="margin-top:8px; font-size:13px;"></div>
+  </div>
+
+  <p class="note">The AI is live (Claude Haiku) across all three chat modes. Safety flagging runs two independent layers on every message — a dedicated AI safety classifier plus keyword matching as a fallback — applied to both what the kid sends and what the AI replies. Still not a dedicated moderation API at scale, but a real second layer, not a keyword list alone. Logging, consent, dashboard, and provenance are all real and fully functional.</p>
 </div>
+<script>
+async function submitInterest() {
+  const input = document.getElementById('interestEmail');
+  const msg = document.getElementById('interestMsg');
+  const email = input.value.trim();
+  msg.style.color = 'var(--warn)';
+  try {
+    const res = await fetch('/api/interest', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'Something went wrong.'); }
+    document.getElementById('interestForm').style.display = 'none';
+    msg.style.color = 'var(--accent)';
+    msg.textContent = "Thanks — we'll be in touch.";
+  } catch (e) {
+    msg.textContent = e.message;
+  }
+}
+</script>
 </body>
 </html>

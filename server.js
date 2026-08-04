@@ -11,10 +11,21 @@ const DB_FILE = path.join(DATA_DIR, 'db.json');
 const anthropic = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 
 app.use(express.json());
+
+// Self-hosted visit counter — no third-party analytics, no cookies, just a
+// count of homepage loads, so there's a real (if rough) signal for whether
+// anyone besides the person building this is actually looking at it.
+app.get('/', (req, res, next) => {
+  const db = readDB();
+  db.visits = (db.visits || 0) + 1;
+  writeDB(db);
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 function readDB() {
-  const empty = { families: [], kids: [], conversations: [], classrooms: [] };
+  const empty = { families: [], kids: [], conversations: [], classrooms: [], interest: [], visits: 0 };
   if (!fs.existsSync(DB_FILE)) return empty;
   try {
     const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
@@ -43,10 +54,11 @@ function newId(prefix) {
   return prefix + crypto.randomBytes(12).toString('hex');
 }
 
-// --- Safety filtering: MVP rule-based check only. -----------------------
-// This is a placeholder, not production-grade moderation. A real launch
-// needs a real moderation API (OpenAI moderation endpoint, Perspective API,
-// or similar) in front of both the kid's messages and the AI's responses.
+// --- Safety filtering: two independent layers, both applied to both the ---
+// kid's message and the AI's response. checkSafety() is instant regex,
+// classifySafety() below is a dedicated Claude classification pass. Neither
+// replaces a dedicated moderation API (OpenAI moderation endpoint, Perspective
+// API) at real scale, but this is a real second layer, not just a keyword list.
 const FLAG_PATTERNS = [
   { re: /\b(kill myself|suicide|want to die|don'?t want to (be alive|live|be here)|not want to (be alive|live|be here)|hurt myself|self.?harm|end it all|better off dead|no reason to live|no point (in living|living))\b/i, reason: 'possible self-harm language' },
   { re: /\b(my address is|my phone number is|my password is|meet me at)\b/i, reason: 'possible personal info sharing' },
@@ -65,6 +77,38 @@ function checkSafety(text) {
     if (p.re.test(text)) return { flagged: true, reason: p.reason };
   }
   return { flagged: false, reason: null };
+}
+
+// Second, independent detection layer: a dedicated Claude classification pass,
+// separate from the chat model's own reply. Regex alone always misses real
+// phrasings; this catches indirect/misspelled/context-dependent risk that a
+// keyword list structurally can't. Runs alongside checkSafety() rather than
+// replacing it — if the API errors, checkSafety's regex is still the floor.
+async function classifySafety(text) {
+  if (!anthropic) return { flagged: false, reason: null };
+  const system = `You are a safety classifier for messages inside a kids' AI chat app (ages roughly 6-17). Classify the given message for real risk signals: self-harm or suicidal language (even indirect, misspelled, or euphemistic), sharing of personal identifying information (home address, phone number, password, a plan to meet someone), or a request for instructions to make or use a weapon/dangerous device. Do NOT flag normal age-appropriate conversation, schoolwork, or clearly fictional/hypothetical discussion (e.g. a book report on a war, a video game question). Respond with ONLY a JSON object and nothing else: {"flagged": boolean, "category": "self_harm" | "personal_info" | "dangerous_content" | "none", "reason": "short reason, empty string if not flagged"}`;
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 150,
+      temperature: 0,
+      system,
+      messages: [{ role: 'user', content: text }],
+    });
+    const block = resp.content.find(b => b.type === 'text');
+    // Claude sometimes wraps the JSON in a ```json fence despite being told
+    // not to — strip it before parsing rather than let that fail silently
+    // into flagged:false, which would defeat this entire safety layer.
+    const raw = block.text.trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const parsed = JSON.parse(raw);
+    return {
+      flagged: !!parsed.flagged,
+      reason: parsed.flagged ? (parsed.reason || parsed.category || 'flagged by safety classifier') : null,
+    };
+  } catch (e) {
+    console.error('Safety classifier error:', e.message);
+    return { flagged: false, reason: null };
+  }
 }
 
 // --- Stub AI: used only when no ANTHROPIC_API_KEY is configured. --------
@@ -170,6 +214,29 @@ async function getAIResponse(userText, mode, priorMessages, band) {
     return "I'm having trouble responding right now — try again in a moment.";
   }
 }
+
+// --- Interest signups: a lower-friction option than setting up a full ------
+// family, for someone just checking the site out. Also the simplest real
+// signal for whether anyone besides the person building this wants it.
+app.post('/api/interest', (req, res) => {
+  const { email } = req.body || {};
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'a valid email is required' });
+  }
+  const db = readDB();
+  db.interest = db.interest || [];
+  if (!db.interest.some(i => i.email.toLowerCase() === email.toLowerCase())) {
+    db.interest.push({ email, ts: Date.now() });
+    writeDB(db);
+  }
+  res.json({ ok: true });
+});
+
+// Rough usage signal, not a real admin panel — this app has no auth anywhere.
+app.get('/api/stats', (req, res) => {
+  const db = readDB();
+  res.json({ visits: db.visits || 0, interestSignups: (db.interest || []).length });
+});
 
 // --- Family + kid accounts -------------------------------------------------
 app.post('/api/family', (req, res) => {
@@ -348,19 +415,27 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   const band = ageBand(kid ? kid.age : null);
   const mode = convo.mode || (convo.homeworkMode ? 'homework' : 'general');
 
-  const userSafety = checkSafety(text);
-  const userMsg = { role: 'kid', content: text, ts: Date.now(), flagged: userSafety.flagged, flagReason: userSafety.reason };
+  // convo.messages here is genuinely prior turns only (this message hasn't
+  // been pushed yet) — getAIResponse appends the current userText itself, so
+  // pushing beforehand would send it to the model twice as consecutive turns.
+  const [userClassifier, aiText] = await Promise.all([
+    classifySafety(text),
+    getAIResponse(text, mode, convo.messages, band),
+  ]);
+  const userRegex = checkSafety(text);
+  const userFlagged = userRegex.flagged || userClassifier.flagged;
+  const userMsg = { role: 'kid', content: text, ts: Date.now(), flagged: userFlagged, flagReason: userRegex.reason || userClassifier.reason };
   convo.messages.push(userMsg);
 
-  const aiText = await getAIResponse(text, mode, convo.messages, band);
-  const aiSafety = checkSafety(aiText);
+  const aiClassifier = await classifySafety(aiText);
+  const aiRegex = checkSafety(aiText);
   const escalated = AI_ESCALATION_SIGNS.test(aiText);
-  if (escalated && !userMsg.flagged) {
+  if ((escalated || aiClassifier.flagged) && !userMsg.flagged) {
     userMsg.flagged = true;
-    userMsg.flagReason = 'possible crisis content (caught by AI response, not keyword match)';
+    userMsg.flagReason = aiClassifier.flagged ? aiClassifier.reason : 'possible crisis content (caught by AI response, not the user message)';
   }
-  const aiFlagged = aiSafety.flagged || escalated;
-  const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiFlagged, flagReason: aiSafety.reason || (escalated ? 'AI response indicates a crisis-support redirect' : null) };
+  const aiFlagged = aiRegex.flagged || aiClassifier.flagged || escalated;
+  const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiFlagged, flagReason: aiRegex.reason || aiClassifier.reason || (escalated ? 'AI response indicates a crisis-support redirect' : null) };
   convo.messages.push(aiMsg);
 
   let tipMsg = null;
