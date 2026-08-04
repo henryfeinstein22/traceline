@@ -65,12 +65,15 @@ const FLAG_PATTERNS = [
   { re: /\b(gun|weapon|bomb)\b.{0,30}\b(how to|make|build)\b/i, reason: 'possible dangerous request' },
 ];
 
-// Keyword matching alone always misses real phrasings (proven: "I don't want
-// to be alive anymore" slipped past the first pattern list entirely). As a
-// second layer, if the AI's own response contains crisis-escalation language
-// (it's generally better at recognizing risk in context than a regex is),
-// flag the exchange even when the user's message didn't match a keyword.
-const AI_ESCALATION_SIGNS = /\b(trusted adult|trusted person|talk to a parent|talk to someone you trust|call 988|text 988|crisis line|i'?m concerned about you|this is (too big|serious)|reach out to a counselor|national suicide prevention)\b/i;
+// A regex over the AI's own response ("trusted adult", "talk to a parent")
+// used to be the second layer here, on the theory that the model surfaces
+// crisis language in context better than a keyword list can. Retired after
+// a 219-thread batch test: every one of the routine AI-literacy responses
+// this system prompt encourages ("if unsure, talk to a trusted adult") was
+// getting falsely flagged, because that phrase means the same thing whether
+// the AI is redirecting a real crisis or answering "can I trust you?" — a
+// plain regex can't tell those apart. classifySafety() below replaces this:
+// it reads the actual AI response for real risk, not just matching phrases.
 
 function checkSafety(text) {
   for (const p of FLAG_PATTERNS) {
@@ -497,13 +500,12 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
 
   const aiClassifier = await classifySafety(aiText);
   const aiRegex = checkSafety(aiText);
-  const escalated = AI_ESCALATION_SIGNS.test(aiText);
-  if ((escalated || aiClassifier.flagged) && !userMsg.flagged) {
+  if (aiClassifier.flagged && !userMsg.flagged) {
     userMsg.flagged = true;
-    userMsg.flagReason = aiClassifier.flagged ? aiClassifier.reason : 'possible crisis content (caught by AI response, not the user message)';
+    userMsg.flagReason = aiClassifier.reason;
   }
-  const aiFlagged = aiRegex.flagged || aiClassifier.flagged || escalated;
-  const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiFlagged, flagReason: aiRegex.reason || aiClassifier.reason || (escalated ? 'AI response indicates a crisis-support redirect' : null) };
+  const aiFlagged = aiRegex.flagged || aiClassifier.flagged;
+  const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiFlagged, flagReason: aiRegex.reason || aiClassifier.reason };
   convo.messages.push(aiMsg);
 
   let tipMsg = null;
