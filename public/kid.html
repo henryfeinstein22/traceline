@@ -70,7 +70,7 @@
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input-row">
         <input type="text" id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendMessage()">
-        <button class="btn" onclick="sendMessage()">Send</button>
+        <button class="btn" id="sendBtn" onclick="sendMessage()">Send</button>
       </div>
     </div>
     <p class="note">Every message here (yours and the AI's) is logged and safety-checked. A parent can see this conversation on their dashboard.</p>
@@ -197,15 +197,37 @@ function renderMessages(messages) {
 
 async function sendMessage() {
   const input = document.getElementById('chatInput');
+  const sendBtn = document.getElementById('sendBtn');
   const text = input.value.trim();
   if (!text) return;
   input.value = '';
-  const res = await fetch('/api/conversations/' + convoId + '/messages', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  });
-  const data = await res.json();
+  sendBtn.disabled = true;
+
+  // Optimistic: show the kid's message immediately, then a typing indicator,
+  // instead of a silent pause while the real AI call is in flight.
+  const el = document.getElementById('chatMessages');
+  const kidDiv = document.createElement('div');
+  kidDiv.className = 'msg kid';
+  kidDiv.textContent = text;
+  el.appendChild(kidDiv);
+  const typingDiv = document.createElement('div');
+  typingDiv.className = 'msg assistant typing';
+  typingDiv.id = 'typingIndicator';
+  typingDiv.innerHTML = '<span></span><span></span><span></span>';
+  el.appendChild(typingDiv);
+  el.scrollTop = el.scrollHeight;
+
+  try {
+    await fetch('/api/conversations/' + convoId + '/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+  } catch (e) {
+    // fall through to reload either way, which will show accurate state
+  }
   await loadMessages();
+  sendBtn.disabled = false;
+  input.focus();
 }
 </script>
 </body>
