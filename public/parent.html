@@ -49,6 +49,10 @@
         <label for="createPass">Choose a passphrase</label>
         <input type="password" id="createPass">
       </div>
+      <div class="field">
+        <label for="createEmail">Your email (for real-time safety alerts)</label>
+        <input type="text" id="createEmail" placeholder="you@example.com">
+      </div>
       <button class="btn" onclick="createFamily()">Create family</button>
       <div id="createError" class="error-msg"></div>
     </div>
@@ -61,6 +65,22 @@
         <a class="btn secondary" id="complianceLink" href="#" target="_blank">Compliance report</a>
         <button class="btn secondary" onclick="signOut()">Sign out</button>
       </div>
+    </div>
+
+    <div class="panel" id="alertBanner" style="display:none; border-color:var(--warn); background:var(--warn-soft);">
+      <h2 style="color:var(--warn);">🚨 New safety alerts</h2>
+      <div id="alertList"></div>
+      <button class="btn secondary" onclick="dismissAlerts()" style="margin-top:8px;">Mark as seen</button>
+    </div>
+
+    <div class="panel" id="emailPromptPanel" style="display:none;">
+      <h2>Get real-time alerts</h2>
+      <p style="margin-top:0; color:var(--ink-soft); font-size:14px;">Add your email to get notified immediately if something gets flagged — right now you'd only see it by checking this dashboard.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input type="text" id="alertEmailInput" placeholder="you@example.com" style="flex:1; min-width:200px;">
+        <button class="btn secondary" onclick="saveAlertEmail()">Save</button>
+      </div>
+      <div id="alertEmailMsg" style="margin-top:8px; font-size:13px;"></div>
     </div>
 
     <div class="panel">
@@ -118,13 +138,14 @@ function switchTab(tab) {
 async function createFamily() {
   const familyNameInput = document.getElementById('createName').value.trim();
   const passphrase = document.getElementById('createPass').value;
+  const email = document.getElementById('createEmail').value.trim();
   const err = document.getElementById('createError');
   err.textContent = '';
   if (!familyNameInput || !passphrase) { err.textContent = 'Enter a family name and passphrase.'; return; }
   try {
     const res = await fetch('/api/family', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ familyName: familyNameInput, passphrase }),
+      body: JSON.stringify({ familyName: familyNameInput, passphrase, email }),
     });
     if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'failed'); }
     const fam = await res.json();
@@ -167,12 +188,63 @@ function signOut() {
   document.getElementById('authView').style.display = 'block';
 }
 
+let alertPollTimer = null;
+
 async function showDash() {
   document.getElementById('authView').style.display = 'none';
   document.getElementById('dashView').style.display = 'block';
   document.getElementById('familyTitle').textContent = familyName;
   document.getElementById('complianceLink').href = 'compliance-report.html?id=' + familyId;
   await loadOverview();
+  await checkAlerts();
+  if (alertPollTimer) clearInterval(alertPollTimer);
+  alertPollTimer = setInterval(checkAlerts, 20000);
+}
+
+async function checkAlerts() {
+  const res = await fetch('/api/family/' + familyId + '/alerts');
+  if (!res.ok) return;
+  const data = await res.json();
+  const banner = document.getElementById('alertBanner');
+  const list = document.getElementById('alertList');
+  if (data.alerts.length > 0) {
+    banner.style.display = 'block';
+    list.innerHTML = data.alerts.map(a => `
+      <div class="convo-row" style="background:#fff; cursor:default;">
+        <div class="convo-top"><span class="convo-title">${esc(a.kidName)} — ${esc(a.conversationTitle)}</span><span class="convo-meta">${new Date(a.ts).toLocaleString()}</span></div>
+        <div style="margin-top:4px; font-size:13px; color:var(--warn);">${esc(a.reason || 'flagged')}</div>
+      </div>
+    `).join('');
+  } else {
+    banner.style.display = 'none';
+  }
+  document.getElementById('emailPromptPanel').style.display = data.emailAddress ? 'none' : 'block';
+  if (!data.emailAlertingConfigured && !data.emailAddress) {
+    // still show the prompt (captures the email for later), no extra copy needed for MVP
+  }
+}
+
+async function dismissAlerts() {
+  await fetch('/api/family/' + familyId + '/alerts/seen', { method: 'POST' });
+  await checkAlerts();
+}
+
+async function saveAlertEmail() {
+  const email = document.getElementById('alertEmailInput').value.trim();
+  const msg = document.getElementById('alertEmailMsg');
+  msg.style.color = 'var(--warn)';
+  try {
+    const res = await fetch('/api/family/' + familyId + '/email', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'failed'); }
+    msg.style.color = 'var(--accent)';
+    msg.textContent = 'Saved.';
+    document.getElementById('emailPromptPanel').style.display = 'none';
+  } catch (e) {
+    msg.textContent = e.message;
+  }
 }
 
 async function loadOverview() {

@@ -240,18 +240,84 @@ app.get('/api/stats', (req, res) => {
   res.json({ visits: db.visits || 0, interestSignups: (db.interest || []).length });
 });
 
+// --- Real-time parent alerts -------------------------------------------
+// Two channels: (1) in-app — the parent dashboard polls /alerts and shows a
+// banner for anything flagged since alertsSeenAt, works today with no setup;
+// (2) email — fires immediately via Resend's HTTP API when RESEND_API_KEY is
+// set (resend.com has a free tier and needs no domain verification to send
+// from onboarding@resend.dev while testing). No-ops cleanly if unconfigured.
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://traceline-production-fd76.up.railway.app';
+
+async function sendParentAlertEmail(family, kid, message) {
+  if (!process.env.RESEND_API_KEY || !family.email) return;
+  try {
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: process.env.ALERT_FROM_EMAIL || 'Traceline <onboarding@resend.dev>',
+        to: family.email,
+        subject: `Traceline: a message from ${kid ? kid.name : 'your kid'} was flagged`,
+        text: `A message in ${kid ? kid.name + "'s" : "your kid's"} Traceline chat was just flagged: "${message.flagReason}".\n\nView it now: ${PUBLIC_URL}/parent.html`,
+      }),
+    });
+    if (!resp.ok) console.error('Email alert failed:', resp.status, await resp.text().catch(() => ''));
+  } catch (e) {
+    console.error('Email alert error:', e.message);
+  }
+}
+
+app.get('/api/family/:familyId/alerts', (req, res) => {
+  const db = readDB();
+  const family = db.families.find(f => f.id === req.params.familyId);
+  if (!family) return res.status(404).json({ error: 'family not found' });
+  const kids = db.kids.filter(k => k.familyId === family.id);
+  const kidById = Object.fromEntries(kids.map(k => [k.id, k]));
+  const convos = db.conversations.filter(c => kidById[c.kidId]);
+  const alerts = [];
+  convos.forEach(c => {
+    c.messages.forEach(m => {
+      if (m.flagged && m.ts > (family.alertsSeenAt || 0)) {
+        alerts.push({ kidName: kidById[c.kidId].name, conversationId: c.id, conversationTitle: c.title, role: m.role, reason: m.flagReason, ts: m.ts });
+      }
+    });
+  });
+  alerts.sort((a, b) => b.ts - a.ts);
+  res.json({ alerts, emailAddress: family.email || null, emailAlertingConfigured: !!process.env.RESEND_API_KEY });
+});
+
+app.post('/api/family/:familyId/alerts/seen', (req, res) => {
+  const db = readDB();
+  const family = db.families.find(f => f.id === req.params.familyId);
+  if (!family) return res.status(404).json({ error: 'family not found' });
+  family.alertsSeenAt = Date.now();
+  writeDB(db);
+  res.json({ ok: true });
+});
+
 // --- Family + kid accounts -------------------------------------------------
 app.post('/api/family', (req, res) => {
-  const { familyName, passphrase } = req.body || {};
+  const { familyName, passphrase, email } = req.body || {};
   if (!familyName || !passphrase) return res.status(400).json({ error: 'familyName and passphrase required' });
   const db = readDB();
   if (db.families.some(f => f.familyName.toLowerCase() === familyName.toLowerCase())) {
     return res.status(409).json({ error: 'a family with that name already exists — choose another name or sign in' });
   }
-  const family = { id: newId('fam'), familyName, passHash: hash(passphrase), createdAt: Date.now() };
+  const family = { id: newId('fam'), familyName, passHash: hash(passphrase), email: email || null, alertsSeenAt: Date.now(), createdAt: Date.now() };
   db.families.push(family);
   writeDB(db);
-  res.json({ id: family.id, familyName: family.familyName });
+  res.json({ id: family.id, familyName: family.familyName, email: family.email });
+});
+
+app.post('/api/family/:familyId/email', (req, res) => {
+  const { email } = req.body || {};
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'a valid email is required' });
+  const db = readDB();
+  const family = db.families.find(f => f.id === req.params.familyId);
+  if (!family) return res.status(404).json({ error: 'family not found' });
+  family.email = email;
+  writeDB(db);
+  res.json({ email: family.email });
 });
 
 // Kids look up their family by name only, no passphrase (parents hold the
@@ -268,7 +334,7 @@ app.post('/api/family/login', (req, res) => {
   const db = readDB();
   const family = db.families.find(f => f.familyName.toLowerCase() === (familyName || '').toLowerCase() && f.passHash === hash(passphrase || ''));
   if (!family) return res.status(401).json({ error: 'invalid family name or passphrase' });
-  res.json({ id: family.id, familyName: family.familyName });
+  res.json({ id: family.id, familyName: family.familyName, email: family.email || null });
 });
 
 app.post('/api/family/:familyId/kids', (req, res) => {
@@ -450,6 +516,11 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
 
   writeDB(db);
   res.json({ userMsg, aiMsg, tipMsg });
+
+  if (userMsg.flagged && kid) {
+    const family = db.families.find(f => f.id === kid.familyId);
+    if (family) sendParentAlertEmail(family, kid, userMsg).catch(e => console.error('alert send failed:', e.message));
+  }
 });
 
 // --- Parent-facing rollup: all conversations + flags across a family's kids
