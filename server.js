@@ -269,6 +269,65 @@ app.get('/api/family/:familyId/overview', (req, res) => {
   res.json({ kids, conversations, flaggedCount, messageCount });
 });
 
+// --- Compliance report: consent records + safety-flag history, formatted
+// to match what state AI-companion-for-minors laws generally require to be
+// disclosable (who consented, when, what was flagged and why).
+function buildComplianceReport(familyId, db) {
+  const family = db.families.find(f => f.id === familyId);
+  if (!family) return null;
+  const kids = db.kids.filter(k => k.familyId === familyId);
+  return {
+    familyName: family.familyName,
+    generatedAt: Date.now(),
+    kids: kids.map(kid => {
+      const convos = db.conversations.filter(c => c.kidId === kid.id);
+      const flags = [];
+      convos.forEach(c => {
+        c.messages.forEach(m => {
+          if (m.flagged) flags.push({ conversationTitle: c.title, role: m.role, reason: m.flagReason, ts: m.ts });
+        });
+      });
+      return {
+        name: kid.name,
+        age: kid.age,
+        consentAt: kid.consentAt,
+        totalConversations: convos.length,
+        totalMessages: convos.reduce((s, c) => s + c.messages.length, 0),
+        flags,
+      };
+    }),
+  };
+}
+
+app.get('/api/family/:familyId/compliance-report', (req, res) => {
+  const db = readDB();
+  const report = buildComplianceReport(req.params.familyId, db);
+  if (!report) return res.status(404).json({ error: 'family not found' });
+  res.json(report);
+});
+
+app.get('/api/family/:familyId/compliance-report.csv', (req, res) => {
+  const db = readDB();
+  const report = buildComplianceReport(req.params.familyId, db);
+  if (!report) return res.status(404).json({ error: 'family not found' });
+
+  const esc = v => `"${String(v).replace(/"/g, '""')}"`;
+  const rows = [['kid_name', 'age', 'consent_recorded_at', 'total_conversations', 'total_messages', 'flagged_role', 'flagged_conversation', 'flag_reason', 'flagged_at']];
+  report.kids.forEach(kid => {
+    if (kid.flags.length === 0) {
+      rows.push([kid.name, kid.age, new Date(kid.consentAt).toISOString(), kid.totalConversations, kid.totalMessages, '', '', '', '']);
+    } else {
+      kid.flags.forEach(f => {
+        rows.push([kid.name, kid.age, new Date(kid.consentAt).toISOString(), kid.totalConversations, kid.totalMessages, f.role, f.conversationTitle, f.reason, new Date(f.ts).toISOString()]);
+      });
+    }
+  });
+  const csv = rows.map(r => r.map(esc).join(',')).join('\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="${report.familyName.replace(/[^a-z0-9]/gi, '_')}_compliance_report.csv"`);
+  res.send(csv);
+});
+
 app.listen(PORT, () => {
   console.log(`Traceline running at http://localhost:${PORT}`);
 });

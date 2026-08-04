@@ -57,7 +57,10 @@
   <div id="dashView" style="display:none;">
     <div class="topbar" style="margin-bottom:16px;">
       <h1 style="font-size:20px; margin:0;" id="familyTitle"></h1>
-      <button class="btn secondary" onclick="signOut()">Sign out</button>
+      <div style="display:flex; gap:8px;">
+        <a class="btn secondary" id="complianceLink" href="#" target="_blank">Compliance report</a>
+        <button class="btn secondary" onclick="signOut()">Sign out</button>
+      </div>
     </div>
 
     <div class="panel">
@@ -164,6 +167,7 @@ async function showDash() {
   document.getElementById('authView').style.display = 'none';
   document.getElementById('dashView').style.display = 'block';
   document.getElementById('familyTitle').textContent = familyName;
+  document.getElementById('complianceLink').href = 'compliance-report.html?id=' + familyId;
   await loadOverview();
 }
 

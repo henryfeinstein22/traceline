@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traceline — Compliance Report</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  @media print {
+    .no-print { display: none !important; }
+    body { background: #fff; }
+    .panel { border: none; padding: 0; }
+  }
+  .report-actions { display: flex; gap: 10px; margin-bottom: 20px; }
+  .kid-report { border: 1px solid var(--line); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+  .kid-report h3 { margin: 0 0 4px; }
+  .kid-report .meta { font-size: 12px; color: var(--ink-faint); margin-bottom: 12px; }
+  .flag-row { font-size: 13px; border-top: 1px solid var(--line); padding: 8px 0; }
+  .flag-row:first-of-type { border-top: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar no-print">
+    <a class="brand" href="index.html">Traceline</a>
+    <nav><a href="parent.html">Parent dashboard</a></nav>
+  </div>
+
+  <header class="hero" style="margin-bottom: 16px;">
+    <p class="eyebrow">Compliance record</p>
+    <h1 style="font-size: 22px;" id="title">Loading...</h1>
+    <p id="generatedAt"></p>
+  </header>
+
+  <div class="report-actions no-print">
+    <button class="btn" onclick="window.print()">Print / Save as PDF</button>
+    <a class="btn secondary" id="csvLink" href="#">Download CSV</a>
+  </div>
+
+  <div class="panel">
+    <h2>What this documents</h2>
+    <p style="margin-top:0; font-size:14px; color:var(--ink-soft);">Parental consent records and safety-flag history for every kid profile in this family, in the format used to demonstrate compliance with state AI-companion-for-minors regulations (consent timestamp, what was flagged, when, and why).</p>
+  </div>
+
+  <div id="kidsReport"></div>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const familyId = params.get('id');
+
+async function load() {
+  if (!familyId) { document.getElementById('title').textContent = 'No family specified'; return; }
+  const res = await fetch('/api/family/' + familyId + '/compliance-report');
+  if (!res.ok) { document.getElementById('title').textContent = 'Report not found'; return; }
+  const report = await res.json();
+
+  document.getElementById('title').textContent = report.familyName + ' — Compliance Report';
+  document.getElementById('generatedAt').textContent = 'Generated ' + new Date(report.generatedAt).toLocaleString();
+  document.getElementById('csvLink').href = '/api/family/' + familyId + '/compliance-report.csv';
+
+  const el = document.getElementById('kidsReport');
+  if (report.kids.length === 0) {
+    el.innerHTML = '<p class="empty">No kid profiles on record.</p>';
+    return;
+  }
+  el.innerHTML = report.kids.map(kid => `
+    <div class="kid-report">
+      <h3>${kid.name}${kid.age ? ' (age ' + kid.age + ')' : ''}</h3>
+      <div class="meta">Parental consent recorded: ${new Date(kid.consentAt).toLocaleString()} · ${kid.totalConversations} conversations · ${kid.totalMessages} messages logged</div>
+      ${kid.flags.length === 0
+        ? '<p class="empty">No safety flags on record.</p>'
+        : `<div class="dash-section-label">Safety flags (${kid.flags.length})</div>` + kid.flags.map(f => `
+            <div class="flag-row"><strong>${f.role === 'kid' ? 'Student message' : 'AI response'}</strong> in "${f.conversationTitle}" — ${f.reason} — ${new Date(f.ts).toLocaleString()}</div>
+          `).join('')
+      }
+    </div>
+  `).join('');
+}
+load();
+</script>
+</body>
+</html>
