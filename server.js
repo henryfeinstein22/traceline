@@ -159,6 +159,9 @@ app.post('/api/family', (req, res) => {
   const { familyName, passphrase } = req.body || {};
   if (!familyName || !passphrase) return res.status(400).json({ error: 'familyName and passphrase required' });
   const db = readDB();
+  if (db.families.some(f => f.familyName.toLowerCase() === familyName.toLowerCase())) {
+    return res.status(409).json({ error: 'a family with that name already exists — choose another name or sign in' });
+  }
   const family = { id: newId('fam'), familyName, passHash: hash(passphrase), createdAt: Date.now() };
   db.families.push(family);
   writeDB(db);
@@ -177,7 +180,7 @@ app.get('/api/family/by-name/:familyName', (req, res) => {
 app.post('/api/family/login', (req, res) => {
   const { familyName, passphrase } = req.body || {};
   const db = readDB();
-  const family = db.families.find(f => f.familyName === familyName && f.passHash === hash(passphrase || ''));
+  const family = db.families.find(f => f.familyName.toLowerCase() === (familyName || '').toLowerCase() && f.passHash === hash(passphrase || ''));
   if (!family) return res.status(401).json({ error: 'invalid family name or passphrase' });
   res.json({ id: family.id, familyName: family.familyName });
 });
