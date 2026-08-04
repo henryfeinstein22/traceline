@@ -42,10 +42,17 @@ function newId(prefix) {
 // needs a real moderation API (OpenAI moderation endpoint, Perspective API,
 // or similar) in front of both the kid's messages and the AI's responses.
 const FLAG_PATTERNS = [
-  { re: /\b(kill myself|suicide|want to die|hurt myself|self.?harm)\b/i, reason: 'possible self-harm language' },
+  { re: /\b(kill myself|suicide|want to die|don'?t want to (be alive|live|be here)|not want to (be alive|live|be here)|hurt myself|self.?harm|end it all|better off dead|no reason to live|no point (in living|living))\b/i, reason: 'possible self-harm language' },
   { re: /\b(my address is|my phone number is|my password is|meet me at)\b/i, reason: 'possible personal info sharing' },
   { re: /\b(gun|weapon|bomb)\b.{0,30}\b(how to|make|build)\b/i, reason: 'possible dangerous request' },
 ];
+
+// Keyword matching alone always misses real phrasings (proven: "I don't want
+// to be alive anymore" slipped past the first pattern list entirely). As a
+// second layer, if the AI's own response contains crisis-escalation language
+// (it's generally better at recognizing risk in context than a regex is),
+// flag the exchange even when the user's message didn't match a keyword.
+const AI_ESCALATION_SIGNS = /\b(trusted adult|trusted person|talk to a parent|talk to someone you trust|call 988|text 988|crisis line|i'?m concerned about you|this is (too big|serious)|reach out to a counselor|national suicide prevention)\b/i;
 
 function checkSafety(text) {
   for (const p of FLAG_PATTERNS) {
@@ -322,7 +329,13 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
 
   const aiText = await getAIResponse(text, convo.homeworkMode, convo.messages, band);
   const aiSafety = checkSafety(aiText);
-  const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiSafety.flagged, flagReason: aiSafety.reason };
+  const escalated = AI_ESCALATION_SIGNS.test(aiText);
+  if (escalated && !userMsg.flagged) {
+    userMsg.flagged = true;
+    userMsg.flagReason = 'possible crisis content (caught by AI response, not keyword match)';
+  }
+  const aiFlagged = aiSafety.flagged || escalated;
+  const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiFlagged, flagReason: aiSafety.reason || (escalated ? 'AI response indicates a crisis-support redirect' : null) };
   convo.messages.push(aiMsg);
 
   let tipMsg = null;
