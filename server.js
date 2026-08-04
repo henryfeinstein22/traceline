@@ -40,6 +40,23 @@ function writeDB(db) {
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 }
 
+// readDB()+mutate+writeDB() is a read-modify-write with no atomicity of its
+// own — under real concurrent load two requests can both read the same
+// on-disk state, and whichever writes second silently erases the first's
+// change (confirmed happening in practice: a kid created via one request
+// vanished because a concurrent request's write raced it). Since this is a
+// single Node process, an in-memory promise-chain mutex is enough to
+// serialize the actual read+write critical sections without a real database.
+// Deliberately NOT used to wrap slow async work (like Anthropic API calls)
+// in the messages route — only the quick read/mutate/write itself, so one
+// slow request can't stall unrelated ones behind it.
+let dbLock = Promise.resolve();
+function withDBLock(fn) {
+  const run = dbLock.then(fn, fn);
+  dbLock = run.then(() => {}, () => {});
+  return run;
+}
+
 function hash(pass) {
   return crypto.createHash('sha256').update(pass).digest('hex');
 }
@@ -229,13 +246,15 @@ app.post('/api/interest', (req, res) => {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ error: 'a valid email is required' });
   }
-  const db = readDB();
-  db.interest = db.interest || [];
-  if (!db.interest.some(i => i.email.toLowerCase() === email.toLowerCase())) {
-    db.interest.push({ email, ts: Date.now() });
-    writeDB(db);
-  }
-  res.json({ ok: true });
+  withDBLock(() => {
+    const db = readDB();
+    db.interest = db.interest || [];
+    if (!db.interest.some(i => i.email.toLowerCase() === email.toLowerCase())) {
+      db.interest.push({ email, ts: Date.now() });
+      writeDB(db);
+    }
+    res.json({ ok: true });
+  });
 });
 
 // Rough usage signal, not a real admin panel — this app has no auth anywhere.
@@ -329,37 +348,43 @@ app.get('/api/family/:familyId/alerts', (req, res) => {
 });
 
 app.post('/api/family/:familyId/alerts/seen', (req, res) => {
-  const db = readDB();
-  const family = db.families.find(f => f.id === req.params.familyId);
-  if (!family) return res.status(404).json({ error: 'family not found' });
-  family.alertsSeenAt = Date.now();
-  writeDB(db);
-  res.json({ ok: true });
+  withDBLock(() => {
+    const db = readDB();
+    const family = db.families.find(f => f.id === req.params.familyId);
+    if (!family) return res.status(404).json({ error: 'family not found' });
+    family.alertsSeenAt = Date.now();
+    writeDB(db);
+    res.json({ ok: true });
+  });
 });
 
 // --- Family + kid accounts -------------------------------------------------
 app.post('/api/family', (req, res) => {
   const { familyName, passphrase, email } = req.body || {};
   if (!familyName || !passphrase) return res.status(400).json({ error: 'familyName and passphrase required' });
-  const db = readDB();
-  if (db.families.some(f => f.familyName.toLowerCase() === familyName.toLowerCase())) {
-    return res.status(409).json({ error: 'a family with that name already exists — choose another name or sign in' });
-  }
-  const family = { id: newId('fam'), familyName, passHash: hash(passphrase), email: email || null, alertsSeenAt: Date.now(), createdAt: Date.now() };
-  db.families.push(family);
-  writeDB(db);
-  res.json({ id: family.id, familyName: family.familyName, email: family.email });
+  withDBLock(() => {
+    const db = readDB();
+    if (db.families.some(f => f.familyName.toLowerCase() === familyName.toLowerCase())) {
+      return res.status(409).json({ error: 'a family with that name already exists — choose another name or sign in' });
+    }
+    const family = { id: newId('fam'), familyName, passHash: hash(passphrase), email: email || null, alertsSeenAt: Date.now(), createdAt: Date.now() };
+    db.families.push(family);
+    writeDB(db);
+    res.json({ id: family.id, familyName: family.familyName, email: family.email });
+  });
 });
 
 app.post('/api/family/:familyId/email', (req, res) => {
   const { email } = req.body || {};
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'a valid email is required' });
-  const db = readDB();
-  const family = db.families.find(f => f.id === req.params.familyId);
-  if (!family) return res.status(404).json({ error: 'family not found' });
-  family.email = email;
-  writeDB(db);
-  res.json({ email: family.email });
+  withDBLock(() => {
+    const db = readDB();
+    const family = db.families.find(f => f.id === req.params.familyId);
+    if (!family) return res.status(404).json({ error: 'family not found' });
+    family.email = email;
+    writeDB(db);
+    res.json({ email: family.email });
+  });
 });
 
 // Kids look up their family by name only, no passphrase (parents hold the
@@ -382,20 +407,22 @@ app.post('/api/family/login', (req, res) => {
 app.post('/api/family/:familyId/kids', (req, res) => {
   const { name, age, consentGiven } = req.body || {};
   if (!name || !consentGiven) return res.status(400).json({ error: 'name and parental consent are required' });
-  const db = readDB();
-  const family = db.families.find(f => f.id === req.params.familyId);
-  if (!family) return res.status(404).json({ error: 'family not found' });
-  const kid = {
-    id: newId('kid'),
-    familyId: family.id,
-    name,
-    age: Number(age) || null,
-    consentAt: Date.now(),
-    createdAt: Date.now(),
-  };
-  db.kids.push(kid);
-  writeDB(db);
-  res.json(kid);
+  withDBLock(() => {
+    const db = readDB();
+    const family = db.families.find(f => f.id === req.params.familyId);
+    if (!family) return res.status(404).json({ error: 'family not found' });
+    const kid = {
+      id: newId('kid'),
+      familyId: family.id,
+      name,
+      age: Number(age) || null,
+      consentAt: Date.now(),
+      createdAt: Date.now(),
+    };
+    db.kids.push(kid);
+    writeDB(db);
+    res.json(kid);
+  });
 });
 
 app.get('/api/family/:familyId/kids', (req, res) => {
@@ -417,13 +444,15 @@ function generateClassCode() {
 app.post('/api/classrooms', (req, res) => {
   const { teacherName, className } = req.body || {};
   if (!teacherName || !className) return res.status(400).json({ error: 'teacherName and className are required' });
-  const db = readDB();
-  let code;
-  do { code = generateClassCode(); } while (db.classrooms.some(c => c.code === code));
-  const classroom = { id: newId('class'), teacherName, className, code, createdAt: Date.now() };
-  db.classrooms.push(classroom);
-  writeDB(db);
-  res.json(classroom);
+  withDBLock(() => {
+    const db = readDB();
+    let code;
+    do { code = generateClassCode(); } while (db.classrooms.some(c => c.code === code));
+    const classroom = { id: newId('class'), teacherName, className, code, createdAt: Date.now() };
+    db.classrooms.push(classroom);
+    writeDB(db);
+    res.json(classroom);
+  });
 });
 
 app.get('/api/classrooms/by-code/:code', (req, res) => {
@@ -436,23 +465,27 @@ app.get('/api/classrooms/by-code/:code', (req, res) => {
 app.post('/api/kids/:kidId/join-classroom', (req, res) => {
   const { code } = req.body || {};
   if (!code) return res.status(400).json({ error: 'code is required' });
-  const db = readDB();
-  const kid = db.kids.find(k => k.id === req.params.kidId);
-  if (!kid) return res.status(404).json({ error: 'kid not found' });
-  const classroom = db.classrooms.find(c => c.code === code.toUpperCase());
-  if (!classroom) return res.status(404).json({ error: 'classroom not found for that code' });
-  kid.classroomId = classroom.id;
-  writeDB(db);
-  res.json({ joined: classroom.className });
+  withDBLock(() => {
+    const db = readDB();
+    const kid = db.kids.find(k => k.id === req.params.kidId);
+    if (!kid) return res.status(404).json({ error: 'kid not found' });
+    const classroom = db.classrooms.find(c => c.code === code.toUpperCase());
+    if (!classroom) return res.status(404).json({ error: 'classroom not found for that code' });
+    kid.classroomId = classroom.id;
+    writeDB(db);
+    res.json({ joined: classroom.className });
+  });
 });
 
 app.post('/api/kids/:kidId/leave-classroom', (req, res) => {
-  const db = readDB();
-  const kid = db.kids.find(k => k.id === req.params.kidId);
-  if (!kid) return res.status(404).json({ error: 'kid not found' });
-  kid.classroomId = null;
-  writeDB(db);
-  res.json({ left: true });
+  withDBLock(() => {
+    const db = readDB();
+    const kid = db.kids.find(k => k.id === req.params.kidId);
+    if (!kid) return res.status(404).json({ error: 'kid not found' });
+    kid.classroomId = null;
+    writeDB(db);
+    res.json({ left: true });
+  });
 });
 
 app.get('/api/classrooms/:id/aggregate', (req, res) => {
@@ -485,22 +518,24 @@ const CHAT_MODES = ['general', 'homework', 'decision'];
 
 app.post('/api/kids/:kidId/conversations', (req, res) => {
   const { title, mode } = req.body || {};
-  const db = readDB();
-  const kid = db.kids.find(k => k.id === req.params.kidId);
-  if (!kid) return res.status(404).json({ error: 'kid not found' });
-  const resolvedMode = CHAT_MODES.includes(mode) ? mode : 'general';
-  const convo = {
-    id: newId('conv'),
-    kidId: kid.id,
-    title: title || 'New chat',
-    mode: resolvedMode,
-    homeworkMode: resolvedMode === 'homework',
-    createdAt: Date.now(),
-    messages: [],
-  };
-  db.conversations.push(convo);
-  writeDB(db);
-  res.json(convo);
+  withDBLock(() => {
+    const db = readDB();
+    const kid = db.kids.find(k => k.id === req.params.kidId);
+    if (!kid) return res.status(404).json({ error: 'kid not found' });
+    const resolvedMode = CHAT_MODES.includes(mode) ? mode : 'general';
+    const convo = {
+      id: newId('conv'),
+      kidId: kid.id,
+      title: title || 'New chat',
+      mode: resolvedMode,
+      homeworkMode: resolvedMode === 'homework',
+      createdAt: Date.now(),
+      messages: [],
+    };
+    db.conversations.push(convo);
+    writeDB(db);
+    res.json(convo);
+  });
 });
 
 app.get('/api/kids/:kidId/conversations', (req, res) => {
@@ -518,25 +553,30 @@ app.get('/api/conversations/:id', (req, res) => {
 app.post('/api/conversations/:id/messages', async (req, res) => {
   const { text } = req.body || {};
   if (!text || !text.trim()) return res.status(400).json({ error: 'text is required' });
-  const db = readDB();
-  const convo = db.conversations.find(c => c.id === req.params.id);
-  if (!convo) return res.status(404).json({ error: 'not found' });
-  const kid = db.kids.find(k => k.id === convo.kidId);
-  const band = ageBand(kid ? kid.age : null);
-  const mode = convo.mode || (convo.homeworkMode ? 'homework' : 'general');
 
-  // convo.messages here is genuinely prior turns only (this message hasn't
-  // been pushed yet) — getAIResponse appends the current userText itself, so
-  // pushing beforehand would send it to the model twice as consecutive turns.
+  // Read for context only — NOT locked, since the AI call below can take
+  // several seconds and holding the lock across it would serialize every
+  // unrelated request behind this one. The actual mutation happens in a
+  // fresh, locked read-modify-write further down.
+  const contextDb = readDB();
+  const contextConvo = contextDb.conversations.find(c => c.id === req.params.id);
+  if (!contextConvo) return res.status(404).json({ error: 'not found' });
+  const contextKid = contextDb.kids.find(k => k.id === contextConvo.kidId);
+  const band = ageBand(contextKid ? contextKid.age : null);
+  const mode = contextConvo.mode || (contextConvo.homeworkMode ? 'homework' : 'general');
+
+  // contextConvo.messages here is genuinely prior turns only (this message
+  // hasn't been pushed yet) — getAIResponse appends the current userText
+  // itself, so pushing beforehand would send it to the model twice as
+  // consecutive turns.
   const [userClassifier, aiText] = await Promise.all([
     classifySafety(text),
-    getAIResponse(text, mode, convo.messages, band),
+    getAIResponse(text, mode, contextConvo.messages, band),
   ]);
   const userRegex = checkSafety(text);
   const userFlagged = userRegex.flagged || userClassifier.flagged;
   const userCategory = userClassifier.flagged ? userClassifier.category : userRegex.category;
   const userMsg = { role: 'kid', content: text, ts: Date.now(), flagged: userFlagged, flagReason: userRegex.reason || userClassifier.reason };
-  convo.messages.push(userMsg);
 
   const aiClassifier = await classifySafety(aiText);
   const aiRegex = checkSafety(aiText);
@@ -547,7 +587,6 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   const aiFlagged = aiRegex.flagged || aiClassifier.flagged;
   const aiCategory = aiClassifier.flagged ? aiClassifier.category : aiRegex.category;
   const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiFlagged, flagReason: aiRegex.reason || aiClassifier.reason };
-  convo.messages.push(aiMsg);
 
   // A flagged message used to only change what the PARENT sees, later. If the
   // signal is specifically self-harm, the kid should see support right now,
@@ -559,24 +598,33 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
       role: 'crisis', ts: Date.now(), flagged: false, flagReason: null,
       content: "I noticed this might mean you're going through something really hard — you don't have to handle it alone.\n\nYou can talk to someone right now:\n- Call or text 988 (Suicide & Crisis Lifeline) — free, 24/7\n- Text HOME to 741741 (Crisis Text Line)\n\nA trusted adult connected to this account will also see this. If you're in immediate danger, please call 911 or go to your nearest emergency room.",
     };
-    convo.messages.push(crisisMsg);
   }
 
-  let tipMsg = null;
-  const tipText = maybeGetLiteracyTip(convo, band);
-  if (tipText) {
-    tipMsg = { role: 'tip', content: tipText, ts: Date.now(), flagged: false, flagReason: null };
-    convo.messages.push(tipMsg);
-    convo.shownTips = [...(convo.shownTips || []), tipText];
-  }
+  await withDBLock(() => {
+    const db = readDB();
+    const convo = db.conversations.find(c => c.id === req.params.id);
+    if (!convo) { res.status(404).json({ error: 'conversation no longer exists' }); return; }
+    const kid = db.kids.find(k => k.id === convo.kidId);
 
-  writeDB(db);
-  res.json({ userMsg, aiMsg, crisisMsg, tipMsg });
+    convo.messages.push(userMsg, aiMsg);
+    if (crisisMsg) convo.messages.push(crisisMsg);
 
-  if (userMsg.flagged && kid) {
-    const family = db.families.find(f => f.id === kid.familyId);
-    if (family) sendParentAlertEmail(family, kid, userMsg).catch(e => console.error('alert send failed:', e.message));
-  }
+    let tipMsg = null;
+    const tipText = maybeGetLiteracyTip(convo, band);
+    if (tipText) {
+      tipMsg = { role: 'tip', content: tipText, ts: Date.now(), flagged: false, flagReason: null };
+      convo.messages.push(tipMsg);
+      convo.shownTips = [...(convo.shownTips || []), tipText];
+    }
+
+    writeDB(db);
+    res.json({ userMsg, aiMsg, crisisMsg, tipMsg });
+
+    if (userMsg.flagged && kid) {
+      const family = db.families.find(f => f.id === kid.familyId);
+      if (family) sendParentAlertEmail(family, kid, userMsg).catch(e => console.error('alert send failed:', e.message));
+    }
+  });
 });
 
 // --- Parent-facing rollup: all conversations + flags across a family's kids
