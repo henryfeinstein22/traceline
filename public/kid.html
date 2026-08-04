@@ -97,6 +97,17 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// The AI often replies with light markdown (**bold**, "- " lists) even
+// though this is a plain-text bubble — escape first, then turn just that
+// syntax into real markup so it doesn't show as literal asterisks/dashes.
+function renderMarkup(text) {
+  let s = esc(text);
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  s = s.split('\n').map(line => line.replace(/^(\s*)[-*]\s+/, '$1• ')).join('<br>');
+  return s;
+}
+
 function setMode(mode, btn) {
   newConvoMode = mode;
   document.querySelectorAll('#modeTabs .mode-btn').forEach(b => b.classList.remove('active'));
@@ -234,7 +245,7 @@ function buildMessageEl(m) {
   }
   const bubble = document.createElement('div');
   bubble.className = 'msg ' + m.role + (m.flagged ? ' flagged' : '');
-  bubble.textContent = m.content;
+  bubble.innerHTML = renderMarkup(m.content);
   group.appendChild(bubble);
   if (m.role === 'assistant') {
     const verifyBtn = document.createElement('button');

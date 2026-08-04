@@ -37,6 +37,14 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+function renderMarkup(text) {
+  let s = esc(text);
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  s = s.split('\n').map(line => line.replace(/^(\s*)[-*]\s+/, '$1• ')).join('<br>');
+  return s;
+}
+
 async function load() {
   if (!convoId) { document.getElementById('convoTitle').textContent = 'No conversation specified'; return; }
   const res = await fetch('/api/conversations/' + convoId);
@@ -58,7 +66,7 @@ async function load() {
       <span class="who">${m.role === 'kid' ? 'Student' : m.role === 'tip' ? 'AI literacy tip' : 'AI assistant'}</span>
       <span class="ts"> — ${new Date(m.ts).toLocaleString()}</span>
       ${m.flagged ? '<span class="badge flag">flagged</span>' : ''}
-      <p>${esc(m.content)}</p>
+      <p>${renderMarkup(m.content)}</p>
     </div>
   `).join('');
 }
