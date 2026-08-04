@@ -104,6 +104,10 @@ let familyId = localStorage.getItem('traceline_family_id');
 let familyName = localStorage.getItem('traceline_family_name');
 let selectedKidId = null;
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function switchTab(tab) {
   document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
   document.getElementById('tabCreate').classList.toggle('active', tab === 'create');
@@ -184,7 +188,7 @@ async function loadOverview() {
     const div = document.createElement('div');
     div.className = 'convo-row';
     div.innerHTML = `
-      <div class="convo-top"><span class="convo-title">${k.name}${k.age ? ' (' + k.age + ')' : ''}</span><span class="convo-meta">consent recorded ${new Date(k.consentAt).toLocaleDateString()}</span></div>
+      <div class="convo-top"><span class="convo-title">${esc(k.name)}${k.age ? ' (' + esc(k.age) + ')' : ''}</span><span class="convo-meta">consent recorded ${new Date(k.consentAt).toLocaleDateString()}</span></div>
       <div style="margin-top:8px;">
         ${k.classroomId
           ? `<span class="badge hw">in a classroom</span> <button type="button" class="btn secondary" style="padding:3px 10px; font-size:11px;" onclick="event.stopPropagation(); leaveClassroom('${k.id}')">leave</button>`
@@ -237,7 +241,7 @@ async function loadConvos(kidId, kidName) {
   const res = await fetch('/api/kids/' + kidId + '/conversations');
   const convos = await res.json();
   const el = document.getElementById('convosList');
-  el.innerHTML = `<p style="font-size:13px; color:var(--ink-faint); margin-top:0;">Showing conversations for <strong>${kidName}</strong></p>`;
+  el.innerHTML = `<p style="font-size:13px; color:var(--ink-faint); margin-top:0;">Showing conversations for <strong>${esc(kidName)}</strong></p>`;
   if (convos.length === 0) {
     el.innerHTML += '<p class="empty">No conversations yet. Open the kid chat and start one.</p>';
     return;
@@ -248,7 +252,7 @@ async function loadConvos(kidId, kidName) {
     div.className = 'convo-row';
     div.innerHTML = `
       <div class="convo-top">
-        <span class="convo-title">${c.title}</span>
+        <span class="convo-title">${esc(c.title)}</span>
         <span>
           ${c.homeworkMode ? '<span class="badge hw">homework</span> ' : ''}
           ${flagCount > 0 ? `<span class="badge flag">${flagCount} flagged</span>` : ''}

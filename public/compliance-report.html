@@ -49,6 +49,10 @@
 const params = new URLSearchParams(window.location.search);
 const familyId = params.get('id');
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 async function load() {
   if (!familyId) { document.getElementById('title').textContent = 'No family specified'; return; }
   const res = await fetch('/api/family/' + familyId + '/compliance-report');
@@ -66,12 +70,12 @@ async function load() {
   }
   el.innerHTML = report.kids.map(kid => `
     <div class="kid-report">
-      <h3>${kid.name}${kid.age ? ' (age ' + kid.age + ')' : ''}</h3>
+      <h3>${esc(kid.name)}${kid.age ? ' (age ' + esc(kid.age) + ')' : ''}</h3>
       <div class="meta">Parental consent recorded: ${new Date(kid.consentAt).toLocaleString()} · ${kid.totalConversations} conversations · ${kid.totalMessages} messages logged</div>
       ${kid.flags.length === 0
         ? '<p class="empty">No safety flags on record.</p>'
         : `<div class="dash-section-label">Safety flags (${kid.flags.length})</div>` + kid.flags.map(f => `
-            <div class="flag-row"><strong>${f.role === 'kid' ? 'Student message' : 'AI response'}</strong> in "${f.conversationTitle}" — ${f.reason} — ${new Date(f.ts).toLocaleString()}</div>
+            <div class="flag-row"><strong>${f.role === 'kid' ? 'Student message' : 'AI response'}</strong> in "${esc(f.conversationTitle)}" — ${esc(f.reason)} — ${new Date(f.ts).toLocaleString()}</div>
           `).join('')
       }
     </div>

@@ -80,6 +80,10 @@
 <script>
 let familyId = null, familyName = null, kidId = null, kidName = null, convoId = null, homeworkMode = false;
 
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 async function findFamily() {
   const name = document.getElementById('famNameInput').value.trim();
   const err = document.getElementById('findError');
@@ -140,7 +144,7 @@ async function loadConvosForKid() {
   convos.forEach(c => {
     const div = document.createElement('div');
     div.className = 'convo-row';
-    div.innerHTML = `<div class="convo-top"><span class="convo-title">${c.title}</span>${c.homeworkMode ? '<span class="badge hw">homework</span>' : ''}</div><div class="convo-meta">${c.messages.length} messages</div>`;
+    div.innerHTML = `<div class="convo-top"><span class="convo-title">${esc(c.title)}</span>${c.homeworkMode ? '<span class="badge hw">homework</span>' : ''}</div><div class="convo-meta">${c.messages.length} messages</div>`;
     div.addEventListener('click', () => openChat(c.id, c.title, c.homeworkMode));
     el.appendChild(div);
   });
