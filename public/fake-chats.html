@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traceline — Synthetic usage viewer</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .fc-row { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s; }
+  .fc-row:hover { border-color: var(--accent); }
+  .fc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .fc-title { font-weight: 600; font-size: 14px; }
+  .fc-meta { font-size: 12px; color: var(--ink-faint); margin-top: 3px; }
+  .fc-preview { font-size: 13px; color: var(--ink-soft); margin-top: 6px; }
+  .fc-controls { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .fc-controls select, .fc-controls input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 14px; }
+  .fc-controls input { flex: 1; min-width: 180px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="index.html"><span class="mark"></span>Traceline</a>
+    <nav><a href="parent.html">Parent dashboard</a></nav>
+  </div>
+
+  <header class="hero" style="margin-bottom:16px;">
+    <p class="eyebrow">Synthetic usage viewer</p>
+    <h1 style="font-size:22px;">Fake chats</h1>
+    <p id="summaryLine" style="color:var(--ink-soft); font-size:14px;">Loading…</p>
+  </header>
+
+  <div class="panel">
+    <div class="fc-controls">
+      <select id="modeFilter" onchange="load()">
+        <option value="">All modes</option>
+        <option value="general">General</option>
+        <option value="homework">Homework</option>
+        <option value="decision">Decision &amp; plan</option>
+      </select>
+      <input type="text" id="searchInput" placeholder="Search title or message text…" onkeydown="if(event.key==='Enter') load()">
+      <button class="btn secondary" onclick="load()">Search</button>
+      <label style="font-size:13px; color:var(--ink-soft); display:flex; align-items:center; gap:6px; margin-left:auto;">
+        <input type="checkbox" id="autoRefresh" checked onchange="toggleAuto()"> live-refresh
+      </label>
+    </div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+let autoTimer = null;
+
+async function load() {
+  const mode = document.getElementById('modeFilter').value;
+  const q = document.getElementById('searchInput').value.trim();
+  const params = new URLSearchParams({ limit: '80' });
+  if (mode) params.set('mode', mode);
+  if (q) params.set('q', q);
+  const res = await fetch('/api/admin/fake-chats?' + params.toString());
+  const data = await res.json();
+  document.getElementById('summaryLine').textContent =
+    data.totalFamilies + ' synthetic families · ' + data.totalConversations + ' matching conversations · showing ' + data.shown;
+  const list = document.getElementById('list');
+  if (data.conversations.length === 0) {
+    list.innerHTML = '<p class="empty">No conversations yet — the batch job may still be starting.</p>';
+    return;
+  }
+  const modeBadge = m => m === 'homework' ? '<span class="badge hw">homework</span>' : m === 'decision' ? '<span class="badge decide">decide &amp; plan</span>' : '';
+  list.innerHTML = data.conversations.map(c => `
+    <div class="fc-row" onclick="window.open('provenance.html?id=${c.id}', '_blank')">
+      <div class="fc-top">
+        <span class="fc-title">${esc(c.kidName)} (${c.kidAge || '?'}) — ${esc(c.title)}</span>
+        <span>${modeBadge(c.mode)} ${c.flaggedCount > 0 ? `<span class="badge flag">${c.flaggedCount} flagged</span>` : ''}</span>
+      </div>
+      <div class="fc-meta">${c.messageCount} messages · ${new Date(c.createdAt).toLocaleString()}</div>
+      <div class="fc-preview">${esc(c.preview)}${c.preview.length >= 140 ? '…' : ''}</div>
+    </div>
+  `).join('');
+}
+
+function toggleAuto() {
+  const on = document.getElementById('autoRefresh').checked;
+  if (autoTimer) clearInterval(autoTimer);
+  if (on) autoTimer = setInterval(load, 15000);
+}
+
+load();
+toggleAuto();
+</script>
+</body>
+</html>

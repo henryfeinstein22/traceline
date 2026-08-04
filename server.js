@@ -243,6 +243,44 @@ app.get('/api/stats', (req, res) => {
   res.json({ visits: db.visits || 0, interestSignups: (db.interest || []).length });
 });
 
+// --- Synthetic-usage viewer: browse the fake families/conversations -------
+// created by testing scripts, identified by the "(batch-...)" / "(auto-...)"
+// naming convention those scripts use. Not linked from any real user-facing
+// page — just a way to review test data at scale.
+app.get('/api/admin/fake-chats', (req, res) => {
+  const db = readDB();
+  const testFamilies = db.families.filter(f => /\((batch|auto)-/i.test(f.familyName));
+  const testFamilyIds = new Set(testFamilies.map(f => f.id));
+  const testKids = db.kids.filter(k => testFamilyIds.has(k.familyId));
+  const kidById = Object.fromEntries(testKids.map(k => [k.id, k]));
+  const testKidIds = new Set(testKids.map(k => k.id));
+
+  let convos = db.conversations.filter(c => testKidIds.has(c.kidId));
+  const { mode, q } = req.query;
+  if (mode) convos = convos.filter(c => (c.mode || (c.homeworkMode ? 'homework' : 'general')) === mode);
+  if (q) {
+    const needle = q.toLowerCase();
+    convos = convos.filter(c => c.title.toLowerCase().includes(needle) || c.messages.some(m => m.content.toLowerCase().includes(needle)));
+  }
+  convos.sort((a, b) => b.createdAt - a.createdAt);
+  const limit = Math.min(parseInt(req.query.limit) || 60, 300);
+  const page = convos.slice(0, limit).map(c => {
+    const kid = kidById[c.kidId];
+    return {
+      id: c.id,
+      title: c.title,
+      mode: c.mode || (c.homeworkMode ? 'homework' : 'general'),
+      kidName: kid ? kid.name : '?',
+      kidAge: kid ? kid.age : null,
+      messageCount: c.messages.length,
+      createdAt: c.createdAt,
+      flaggedCount: c.messages.filter(m => m.flagged).length,
+      preview: c.messages[0] ? c.messages[0].content.slice(0, 140) : '',
+    };
+  });
+  res.json({ totalFamilies: testFamilies.length, totalConversations: convos.length, shown: page.length, conversations: page });
+});
+
 // --- Real-time parent alerts -------------------------------------------
 // Two channels: (1) in-app — the parent dashboard polls /alerts and shows a
 // banner for anything flagged since alertsSeenAt, works today with no setup;
