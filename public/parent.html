@@ -183,10 +183,35 @@ async function loadOverview() {
   data.kids.forEach(k => {
     const div = document.createElement('div');
     div.className = 'convo-row';
-    div.innerHTML = `<div class="convo-top"><span class="convo-title">${k.name}${k.age ? ' (' + k.age + ')' : ''}</span><span class="convo-meta">consent recorded ${new Date(k.consentAt).toLocaleDateString()}</span></div>`;
+    div.innerHTML = `
+      <div class="convo-top"><span class="convo-title">${k.name}${k.age ? ' (' + k.age + ')' : ''}</span><span class="convo-meta">consent recorded ${new Date(k.consentAt).toLocaleDateString()}</span></div>
+      <div style="margin-top:8px;">
+        ${k.classroomId
+          ? `<span class="badge hw">in a classroom</span> <button type="button" class="btn secondary" style="padding:3px 10px; font-size:11px;" onclick="event.stopPropagation(); leaveClassroom('${k.id}')">leave</button>`
+          : `<button type="button" class="btn secondary" style="padding:3px 10px; font-size:11px;" onclick="event.stopPropagation(); joinClassroom('${k.id}')">+ join a classroom</button>`}
+      </div>
+    `;
     div.addEventListener('click', () => { selectedKidId = k.id; loadConvos(k.id, k.name); });
     kidsList.appendChild(div);
   });
+}
+
+async function joinClassroom(kidId) {
+  const code = window.prompt("Enter the classroom code your teacher shared:");
+  if (!code) return;
+  const res = await fetch('/api/kids/' + kidId + '/join-classroom', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  });
+  if (!res.ok) { const d = await res.json(); alert(d.error || 'Could not join that classroom.'); return; }
+  const data = await res.json();
+  alert('Joined ' + data.joined + '. Only aggregate class-wide counts are shared — never your kid\'s name, messages, or content.');
+  await loadOverview();
+}
+
+async function leaveClassroom(kidId) {
+  await fetch('/api/kids/' + kidId + '/leave-classroom', { method: 'POST' });
+  await loadOverview();
 }
 
 async function addKid() {

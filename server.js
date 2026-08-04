@@ -14,11 +14,13 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 function readDB() {
-  if (!fs.existsSync(DB_FILE)) return { families: [], kids: [], conversations: [] };
+  const empty = { families: [], kids: [], conversations: [], classrooms: [] };
+  if (!fs.existsSync(DB_FILE)) return empty;
   try {
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    return { ...empty, ...data };
   } catch (e) {
-    return { families: [], kids: [], conversations: [] };
+    return empty;
   }
 }
 
@@ -195,6 +197,83 @@ app.post('/api/family/:familyId/kids', (req, res) => {
 app.get('/api/family/:familyId/kids', (req, res) => {
   const db = readDB();
   res.json(db.kids.filter(k => k.familyId === req.params.familyId));
+});
+
+// --- Classrooms: opt-in, aggregate-only view for teachers. No individual --
+// kid names, messages, or identifying info are ever exposed here — counts
+// and rates only. A kid joins via a code a parent enters, same consent-first
+// pattern as everything else in this app.
+function generateClassCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+app.post('/api/classrooms', (req, res) => {
+  const { teacherName, className } = req.body || {};
+  if (!teacherName || !className) return res.status(400).json({ error: 'teacherName and className are required' });
+  const db = readDB();
+  let code;
+  do { code = generateClassCode(); } while (db.classrooms.some(c => c.code === code));
+  const classroom = { id: newId('class'), teacherName, className, code, createdAt: Date.now() };
+  db.classrooms.push(classroom);
+  writeDB(db);
+  res.json(classroom);
+});
+
+app.get('/api/classrooms/by-code/:code', (req, res) => {
+  const db = readDB();
+  const classroom = db.classrooms.find(c => c.code === req.params.code.toUpperCase());
+  if (!classroom) return res.status(404).json({ error: 'classroom not found' });
+  res.json({ id: classroom.id, className: classroom.className, teacherName: classroom.teacherName });
+});
+
+app.post('/api/kids/:kidId/join-classroom', (req, res) => {
+  const { code } = req.body || {};
+  if (!code) return res.status(400).json({ error: 'code is required' });
+  const db = readDB();
+  const kid = db.kids.find(k => k.id === req.params.kidId);
+  if (!kid) return res.status(404).json({ error: 'kid not found' });
+  const classroom = db.classrooms.find(c => c.code === code.toUpperCase());
+  if (!classroom) return res.status(404).json({ error: 'classroom not found for that code' });
+  kid.classroomId = classroom.id;
+  writeDB(db);
+  res.json({ joined: classroom.className });
+});
+
+app.post('/api/kids/:kidId/leave-classroom', (req, res) => {
+  const db = readDB();
+  const kid = db.kids.find(k => k.id === req.params.kidId);
+  if (!kid) return res.status(404).json({ error: 'kid not found' });
+  kid.classroomId = null;
+  writeDB(db);
+  res.json({ left: true });
+});
+
+app.get('/api/classrooms/:id/aggregate', (req, res) => {
+  const db = readDB();
+  const classroom = db.classrooms.find(c => c.id === req.params.id);
+  if (!classroom) return res.status(404).json({ error: 'classroom not found' });
+  const kids = db.kids.filter(k => k.classroomId === classroom.id);
+  const kidIds = new Set(kids.map(k => k.id));
+  const convos = db.conversations.filter(c => kidIds.has(c.kidId));
+  const homeworkConvos = convos.filter(c => c.homeworkMode);
+  const totalMessages = convos.reduce((s, c) => s + c.messages.length, 0);
+  const flaggedMessages = convos.reduce((s, c) => s + c.messages.filter(m => m.flagged).length, 0);
+  const tipsShown = convos.reduce((s, c) => s + c.messages.filter(m => m.role === 'tip').length, 0);
+  res.json({
+    className: classroom.className,
+    teacherName: classroom.teacherName,
+    code: classroom.code,
+    studentCount: kids.length,
+    totalConversations: convos.length,
+    homeworkConversations: homeworkConvos.length,
+    totalMessages,
+    flaggedMessages,
+    flagRate: totalMessages ? Math.round((flaggedMessages / totalMessages) * 1000) / 10 : 0,
+    literacyTipsShown: tipsShown,
+  });
 });
 
 // --- Conversations / messages ----------------------------------------------

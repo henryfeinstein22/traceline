@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traceline — Teacher view</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="index.html">Traceline</a>
+    <nav><a href="parent.html">Parent dashboard</a></nav>
+  </div>
+
+  <header class="hero" style="margin-bottom: 20px;">
+    <p class="eyebrow">Teacher view — aggregate only</p>
+    <h1 style="font-size: 24px;">Classroom AI usage, no individual data</h1>
+    <p>Create a class code, share it with parents to opt their kid in, and see class-wide engagement — never individual names, messages, or content. Same privacy-first principle as everything else in Traceline.</p>
+  </header>
+
+  <div class="panel" id="createPanel">
+    <h2>Create a classroom</h2>
+    <div class="row">
+      <div class="field"><label for="teacherName">Your name</label><input type="text" id="teacherName" placeholder="Ms. Rivera"></div>
+      <div class="field"><label for="className">Class name</label><input type="text" id="className" placeholder="Period 3 Science"></div>
+    </div>
+    <button class="btn" onclick="createClassroom()">Create classroom</button>
+    <div id="createError" class="error-msg"></div>
+  </div>
+
+  <div class="panel" id="lookupPanel">
+    <h2>View an existing classroom</h2>
+    <div class="field"><label for="lookupCode">Classroom code</label><input type="text" id="lookupCode" placeholder="e.g. AB3XQ9" style="text-transform:uppercase;"></div>
+    <button class="btn secondary" onclick="viewClassroom(document.getElementById('lookupCode').value)">View aggregate</button>
+  </div>
+
+  <div class="panel" id="resultPanel" style="display:none;">
+    <h2 id="resultClassName"></h2>
+    <p class="note" style="margin-top:-8px;">Share this code with parents so they can opt their kid in from their dashboard: <strong id="resultCode" style="font-family:monospace; font-size:16px; color:var(--accent);"></strong></p>
+    <div class="stats-row" id="statsRow" style="margin-top:16px;"></div>
+    <p class="note" id="flagNote"></p>
+  </div>
+</div>
+
+<script>
+async function createClassroom() {
+  const teacherName = document.getElementById('teacherName').value.trim();
+  const className = document.getElementById('className').value.trim();
+  const err = document.getElementById('createError');
+  err.textContent = '';
+  if (!teacherName || !className) { err.textContent = 'Enter your name and a class name.'; return; }
+  const res = await fetch('/api/classrooms', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ teacherName, className }),
+  });
+  if (!res.ok) { err.textContent = 'Could not create classroom.'; return; }
+  const classroom = await res.json();
+  await viewClassroom(classroom.code);
+}
+
+async function viewClassroom(code) {
+  code = (code || '').trim().toUpperCase();
+  if (!code) return;
+  const lookupRes = await fetch('/api/classrooms/by-code/' + code);
+  if (!lookupRes.ok) { alert('No classroom found for that code.'); return; }
+  const classroom = await lookupRes.json();
+  const res = await fetch('/api/classrooms/' + classroom.id + '/aggregate');
+  const data = await res.json();
+
+  document.getElementById('resultClassName').textContent = data.className + ' — ' + data.teacherName;
+  document.getElementById('resultCode').textContent = data.code;
+  document.getElementById('statsRow').innerHTML = `
+    <div class="stat"><div class="v">${data.studentCount}</div><div class="l">students opted in</div></div>
+    <div class="stat"><div class="v">${data.totalConversations}</div><div class="l">conversations</div></div>
+    <div class="stat"><div class="v">${data.homeworkConversations}</div><div class="l">homework mode</div></div>
+    <div class="stat"><div class="v">${data.totalMessages}</div><div class="l">total messages</div></div>
+    <div class="stat"><div class="v">${data.literacyTipsShown}</div><div class="l">AI-literacy tips shown</div></div>
+    <div class="stat"><div class="v">${data.flagRate}%</div><div class="l">flag rate</div></div>
+  `;
+  document.getElementById('flagNote').textContent = data.studentCount === 0
+    ? 'No students opted in yet — share the code above with parents.'
+    : `${data.flaggedMessages} of ${data.totalMessages} messages were safety-flagged across the class. This view never shows which student or what was said.`;
+  document.getElementById('resultPanel').style.display = 'block';
+}
+
+const params = new URLSearchParams(window.location.search);
+if (params.get('code')) viewClassroom(params.get('code'));
+</script>
+</body>
+</html>
