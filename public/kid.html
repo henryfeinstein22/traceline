@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traceline — Chat</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="index.html">Traceline</a>
+    <nav><a href="parent.html">Parent dashboard</a></nav>
+  </div>
+
+  <div id="findFamily">
+    <header class="hero" style="margin-bottom:16px;">
+      <p class="eyebrow">Kid chat</p>
+      <h1 style="font-size:22px;">What's your family name?</h1>
+    </header>
+    <div class="panel">
+      <div class="field">
+        <label for="famNameInput">Family name</label>
+        <input type="text" id="famNameInput" placeholder="e.g. The Feinsteins">
+      </div>
+      <button class="btn" onclick="findFamily()">Next</button>
+      <div id="findError" class="error-msg"></div>
+    </div>
+  </div>
+
+  <div id="pickKid" style="display:none;">
+    <header class="hero" style="margin-bottom:16px;">
+      <h1 style="font-size:22px;">Who's chatting?</h1>
+    </header>
+    <div class="panel" id="kidPickerPanel"></div>
+  </div>
+
+  <div id="convoPicker" style="display:none;">
+    <div class="topbar" style="margin-bottom:12px;">
+      <h1 style="font-size:20px; margin:0;" id="kidGreeting"></h1>
+      <button class="btn secondary" onclick="backToFamily()">Not you?</button>
+    </div>
+    <div class="panel">
+      <h2>Your chats</h2>
+      <div id="convosForKid"></div>
+      <details style="margin-top:12px;" open>
+        <summary style="cursor:pointer; font-size:13px; color:var(--ink-soft);">+ start a new chat</summary>
+        <div style="margin-top:14px;">
+          <div class="field"><label for="newTitle">What's this chat about?</label><input type="text" id="newTitle" placeholder="e.g. Science project on volcanoes"></div>
+          <div class="check-row">
+            <input type="checkbox" id="hwToggle">
+            <label for="hwToggle" style="margin:0;">This is for homework — keep a record I can share with my teacher showing how I worked through it.</label>
+          </div>
+          <button class="btn" onclick="startConvo()">Start chat</button>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div id="chatView" style="display:none;">
+    <div class="topbar" style="margin-bottom:12px;">
+      <h1 style="font-size:18px; margin:0;" id="chatTitle"></h1>
+      <button class="btn secondary" onclick="backToConvoPicker()">← back</button>
+    </div>
+    <div class="chat-shell">
+      <div class="chat-topbar">
+        <span class="title" id="chatTopbarTitle"></span>
+        <span id="hwBadge" class="badge hw" style="display:none;">homework — logged for provenance</span>
+      </div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="Type a message..." onkeydown="if(event.key==='Enter') sendMessage()">
+        <button class="btn" onclick="sendMessage()">Send</button>
+      </div>
+    </div>
+    <p class="note">Every message here (yours and the AI's) is logged and safety-checked. A parent can see this conversation on their dashboard.</p>
+  </div>
+</div>
+
+<script>
+let familyId = null, familyName = null, kidId = null, kidName = null, convoId = null, homeworkMode = false;
+
+async function findFamily() {
+  const name = document.getElementById('famNameInput').value.trim();
+  const err = document.getElementById('findError');
+  err.textContent = '';
+  if (!name) { err.textContent = 'Enter a family name.'; return; }
+  try {
+    const res = await fetch('/api/family/by-name/' + encodeURIComponent(name));
+    if (!res.ok) throw new Error("Couldn't find that family. Ask a parent to set one up first.");
+    const fam = await res.json();
+    familyId = fam.id; familyName = fam.familyName;
+    await loadKidPicker();
+  } catch (e) {
+    err.textContent = e.message;
+  }
+}
+
+async function loadKidPicker() {
+  const res = await fetch('/api/family/' + familyId + '/kids');
+  const kids = await res.json();
+  const panel = document.getElementById('kidPickerPanel');
+  if (kids.length === 0) {
+    panel.innerHTML = '<p class="empty">No kid profiles yet — ask a parent to add one on the dashboard first.</p>';
+  } else {
+    panel.innerHTML = '';
+    kids.forEach(k => {
+      const btn = document.createElement('button');
+      btn.className = 'btn secondary';
+      btn.style.display = 'block';
+      btn.style.width = '100%';
+      btn.style.marginBottom = '8px';
+      btn.textContent = k.name;
+      btn.onclick = () => selectKid(k.id, k.name);
+      panel.appendChild(btn);
+    });
+  }
+  document.getElementById('findFamily').style.display = 'none';
+  document.getElementById('pickKid').style.display = 'block';
+}
+
+function selectKid(id, name) {
+  kidId = id; kidName = name;
+  document.getElementById('kidGreeting').textContent = 'Hi, ' + name + '!';
+  document.getElementById('pickKid').style.display = 'none';
+  document.getElementById('convoPicker').style.display = 'block';
+  loadConvosForKid();
+}
+
+function backToFamily() {
+  document.getElementById('convoPicker').style.display = 'none';
+  document.getElementById('findFamily').style.display = 'block';
+}
+
+async function loadConvosForKid() {
+  const res = await fetch('/api/kids/' + kidId + '/conversations');
+  const convos = await res.json();
+  const el = document.getElementById('convosForKid');
+  el.innerHTML = convos.length === 0 ? '<p class="empty">No chats yet — start one below.</p>' : '';
+  convos.forEach(c => {
+    const div = document.createElement('div');
+    div.className = 'convo-row';
+    div.innerHTML = `<div class="convo-top"><span class="convo-title">${c.title}</span>${c.homeworkMode ? '<span class="badge hw">homework</span>' : ''}</div><div class="convo-meta">${c.messages.length} messages</div>`;
+    div.addEventListener('click', () => openChat(c.id, c.title, c.homeworkMode));
+    el.appendChild(div);
+  });
+}
+
+async function startConvo() {
+  const title = document.getElementById('newTitle').value.trim() || 'New chat';
+  const hw = document.getElementById('hwToggle').checked;
+  const res = await fetch('/api/kids/' + kidId + '/conversations', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, homeworkMode: hw }),
+  });
+  const convo = await res.json();
+  openChat(convo.id, convo.title, convo.homeworkMode);
+}
+
+function openChat(id, title, hw) {
+  convoId = id; homeworkMode = hw;
+  document.getElementById('chatTitle').textContent = title;
+  document.getElementById('chatTopbarTitle').textContent = title;
+  document.getElementById('hwBadge').style.display = hw ? 'inline-block' : 'none';
+  document.getElementById('convoPicker').style.display = 'none';
+  document.getElementById('chatView').style.display = 'block';
+  loadMessages();
+}
+
+function backToConvoPicker() {
+  document.getElementById('chatView').style.display = 'none';
+  document.getElementById('convoPicker').style.display = 'block';
+  loadConvosForKid();
+}
+
+async function loadMessages() {
+  const res = await fetch('/api/conversations/' + convoId);
+  const convo = await res.json();
+  renderMessages(convo.messages);
+}
+
+function renderMessages(messages) {
+  const el = document.getElementById('chatMessages');
+  el.innerHTML = '';
+  messages.forEach(m => {
+    const div = document.createElement('div');
+    div.className = 'msg ' + m.role + (m.flagged ? ' flagged' : '');
+    div.textContent = m.content;
+    el.appendChild(div);
+  });
+  el.scrollTop = el.scrollHeight;
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  const res = await fetch('/api/conversations/' + convoId + '/messages', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
+  const data = await res.json();
+  await loadMessages();
+}
+</script>
+</body>
+</html>

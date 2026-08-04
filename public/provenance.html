@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traceline — Provenance record</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="index.html">Traceline</a>
+  </div>
+
+  <header class="hero" style="margin-bottom:16px;">
+    <p class="eyebrow">Read-only provenance record</p>
+    <h1 style="font-size:22px;" id="convoTitle">Loading...</h1>
+    <p id="convoMeta"></p>
+  </header>
+
+  <div class="panel">
+    <h2>What this proves</h2>
+    <p style="margin-top:0; font-size:14px; color:var(--ink-soft);">This is the complete, timestamped, unedited record of an AI-assisted work session — not a detection score, not a probability that AI was used. Every prompt and response, in order, with timestamps. This is what "show your work" looks like for AI-assisted work.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Full record</h2>
+    <div id="trail"></div>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const convoId = params.get('id');
+
+async function load() {
+  if (!convoId) { document.getElementById('convoTitle').textContent = 'No conversation specified'; return; }
+  const res = await fetch('/api/conversations/' + convoId);
+  if (!res.ok) { document.getElementById('convoTitle').textContent = 'Record not found'; return; }
+  const c = await res.json();
+  document.getElementById('convoTitle').textContent = c.title;
+  document.getElementById('convoMeta').textContent =
+    (c.homeworkMode ? 'Homework record · ' : '') +
+    c.messages.length + ' messages · started ' + new Date(c.createdAt).toLocaleString();
+
+  const trail = document.getElementById('trail');
+  if (c.messages.length === 0) {
+    trail.innerHTML = '<p class="empty">No messages in this conversation yet.</p>';
+    return;
+  }
+  trail.innerHTML = c.messages.map(m => `
+    <div class="provenance-msg">
+      <span class="who">${m.role === 'kid' ? 'Student' : 'AI assistant'}</span>
+      <span class="ts"> — ${new Date(m.ts).toLocaleString()}</span>
+      ${m.flagged ? '<span class="badge flag">flagged</span>' : ''}
+      <p>${m.content}</p>
+    </div>
+  `).join('');
+}
+load();
+</script>
+</body>
+</html>

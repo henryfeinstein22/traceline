@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traceline — Parent dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="brand" href="index.html">Traceline</a>
+    <nav>
+      <a href="index.html">About</a>
+      <a href="kid.html">Open kid chat</a>
+    </nav>
+  </div>
+
+  <div id="authView">
+    <header class="hero" style="margin-bottom:20px;">
+      <p class="eyebrow">Parent dashboard</p>
+      <h1 style="font-size:24px;">Sign in or create a family</h1>
+    </header>
+
+    <div class="tabs">
+      <button id="tabLogin" class="active" onclick="switchTab('login')">Sign in</button>
+      <button id="tabCreate" onclick="switchTab('create')">Create family</button>
+    </div>
+
+    <div class="panel" id="loginPanel">
+      <div class="field">
+        <label for="loginName">Family name</label>
+        <input type="text" id="loginName" placeholder="e.g. The Feinsteins">
+      </div>
+      <div class="field">
+        <label for="loginPass">Passphrase</label>
+        <input type="password" id="loginPass">
+      </div>
+      <button class="btn" onclick="login()">Sign in</button>
+      <div id="loginError" class="error-msg"></div>
+    </div>
+
+    <div class="panel" id="createPanel" style="display:none;">
+      <div class="field">
+        <label for="createName">Family name</label>
+        <input type="text" id="createName" placeholder="e.g. The Feinsteins">
+      </div>
+      <div class="field">
+        <label for="createPass">Choose a passphrase</label>
+        <input type="password" id="createPass">
+      </div>
+      <button class="btn" onclick="createFamily()">Create family</button>
+      <div id="createError" class="error-msg"></div>
+    </div>
+  </div>
+
+  <div id="dashView" style="display:none;">
+    <div class="topbar" style="margin-bottom:16px;">
+      <h1 style="font-size:20px; margin:0;" id="familyTitle"></h1>
+      <button class="btn secondary" onclick="signOut()">Sign out</button>
+    </div>
+
+    <div class="panel">
+      <h2>Overview</h2>
+      <div class="stats-row">
+        <div class="stat"><div class="v" id="statKids">0</div><div class="l">kids</div></div>
+        <div class="stat"><div class="v" id="statMsgs">0</div><div class="l">messages logged</div></div>
+        <div class="stat"><div class="v" id="statFlags">0</div><div class="l">safety flags</div></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Kids</h2>
+      <div id="kidsList"></div>
+      <details style="margin-top:12px;">
+        <summary style="cursor:pointer; font-size:13px; color:var(--ink-soft);">+ add a kid profile</summary>
+        <div style="margin-top:14px;">
+          <div class="row">
+            <div class="field"><label for="kidName">Name</label><input type="text" id="kidName"></div>
+            <div class="field"><label for="kidAge">Age</label><input type="number" id="kidAge" min="5" max="18"></div>
+          </div>
+          <div class="check-row">
+            <input type="checkbox" id="consentCheck">
+            <label for="consentCheck" style="margin:0;">I am this child's parent/guardian and I consent to their AI conversations being logged and safety-monitored through Traceline. (This timestamp is recorded as the consent record.)</label>
+          </div>
+          <button class="btn" onclick="addKid()">Add kid</button>
+          <div id="addKidError" class="error-msg"></div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <h2>Conversations</h2>
+      <div id="convosList"><p class="empty">Select a kid to view their conversations.</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let familyId = localStorage.getItem('traceline_family_id');
+let familyName = localStorage.getItem('traceline_family_name');
+let selectedKidId = null;
+
+function switchTab(tab) {
+  document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+  document.getElementById('tabCreate').classList.toggle('active', tab === 'create');
+  document.getElementById('loginPanel').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('createPanel').style.display = tab === 'create' ? 'block' : 'none';
+}
+
+async function createFamily() {
+  const familyNameInput = document.getElementById('createName').value.trim();
+  const passphrase = document.getElementById('createPass').value;
+  const err = document.getElementById('createError');
+  err.textContent = '';
+  if (!familyNameInput || !passphrase) { err.textContent = 'Enter a family name and passphrase.'; return; }
+  try {
+    const res = await fetch('/api/family', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ familyName: familyNameInput, passphrase }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'failed'); }
+    const fam = await res.json();
+    setFamily(fam.id, fam.familyName);
+  } catch (e) {
+    err.textContent = e.message;
+  }
+}
+
+async function login() {
+  const familyNameInput = document.getElementById('loginName').value.trim();
+  const passphrase = document.getElementById('loginPass').value;
+  const err = document.getElementById('loginError');
+  err.textContent = '';
+  try {
+    const res = await fetch('/api/family/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ familyName: familyNameInput, passphrase }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'failed'); }
+    const fam = await res.json();
+    setFamily(fam.id, fam.familyName);
+  } catch (e) {
+    err.textContent = e.message;
+  }
+}
+
+function setFamily(id, name) {
+  familyId = id; familyName = name;
+  localStorage.setItem('traceline_family_id', id);
+  localStorage.setItem('traceline_family_name', name);
+  showDash();
+}
+
+function signOut() {
+  localStorage.removeItem('traceline_family_id');
+  localStorage.removeItem('traceline_family_name');
+  familyId = null;
+  document.getElementById('dashView').style.display = 'none';
+  document.getElementById('authView').style.display = 'block';
+}
+
+async function showDash() {
+  document.getElementById('authView').style.display = 'none';
+  document.getElementById('dashView').style.display = 'block';
+  document.getElementById('familyTitle').textContent = familyName;
+  await loadOverview();
+}
+
+async function loadOverview() {
+  const res = await fetch('/api/family/' + familyId + '/overview');
+  const data = await res.json();
+  document.getElementById('statKids').textContent = data.kids.length;
+  document.getElementById('statMsgs').textContent = data.messageCount;
+  document.getElementById('statFlags').textContent = data.flaggedCount;
+
+  const kidsList = document.getElementById('kidsList');
+  kidsList.innerHTML = data.kids.length === 0 ? '<p class="empty">No kid profiles yet.</p>' : '';
+  data.kids.forEach(k => {
+    const div = document.createElement('div');
+    div.className = 'convo-row';
+    div.innerHTML = `<div class="convo-top"><span class="convo-title">${k.name}${k.age ? ' (' + k.age + ')' : ''}</span><span class="convo-meta">consent recorded ${new Date(k.consentAt).toLocaleDateString()}</span></div>`;
+    div.addEventListener('click', () => { selectedKidId = k.id; loadConvos(k.id, k.name); });
+    kidsList.appendChild(div);
+  });
+}
+
+async function addKid() {
+  const name = document.getElementById('kidName').value.trim();
+  const age = document.getElementById('kidAge').value;
+  const consentGiven = document.getElementById('consentCheck').checked;
+  const err = document.getElementById('addKidError');
+  err.textContent = '';
+  if (!name) { err.textContent = 'Enter a name.'; return; }
+  if (!consentGiven) { err.textContent = 'Parental consent is required to add a kid profile.'; return; }
+  const res = await fetch('/api/family/' + familyId + '/kids', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, age, consentGiven }),
+  });
+  if (!res.ok) { const d = await res.json(); err.textContent = d.error || 'failed'; return; }
+  document.getElementById('kidName').value = '';
+  document.getElementById('kidAge').value = '';
+  document.getElementById('consentCheck').checked = false;
+  await loadOverview();
+}
+
+async function loadConvos(kidId, kidName) {
+  const res = await fetch('/api/kids/' + kidId + '/conversations');
+  const convos = await res.json();
+  const el = document.getElementById('convosList');
+  el.innerHTML = `<p style="font-size:13px; color:var(--ink-faint); margin-top:0;">Showing conversations for <strong>${kidName}</strong></p>`;
+  if (convos.length === 0) {
+    el.innerHTML += '<p class="empty">No conversations yet. Open the kid chat and start one.</p>';
+    return;
+  }
+  convos.forEach(c => {
+    const flagCount = c.messages.filter(m => m.flagged).length;
+    const div = document.createElement('div');
+    div.className = 'convo-row';
+    div.innerHTML = `
+      <div class="convo-top">
+        <span class="convo-title">${c.title}</span>
+        <span>
+          ${c.homeworkMode ? '<span class="badge hw">homework</span> ' : ''}
+          ${flagCount > 0 ? `<span class="badge flag">${flagCount} flagged</span>` : ''}
+        </span>
+      </div>
+      <div class="convo-meta">${c.messages.length} messages · started ${new Date(c.createdAt).toLocaleString()}</div>
+    `;
+    div.addEventListener('click', () => {
+      if (c.homeworkMode) {
+        window.open('provenance.html?id=' + c.id, '_blank');
+      } else {
+        window.open('provenance.html?id=' + c.id, '_blank');
+      }
+    });
+    el.appendChild(div);
+  });
+}
+
+if (familyId && familyName) showDash();
+</script>
+</body>
+</html>
