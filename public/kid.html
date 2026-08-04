@@ -236,11 +236,25 @@ function buildMessageEl(m) {
   bubble.className = 'msg ' + m.role + (m.flagged ? ' flagged' : '');
   bubble.textContent = m.content;
   group.appendChild(bubble);
+  if (m.role === 'assistant') {
+    const verifyBtn = document.createElement('button');
+    verifyBtn.type = 'button';
+    verifyBtn.className = 'verify-btn';
+    verifyBtn.textContent = 'How do you know that?';
+    verifyBtn.onclick = askHowDoYouKnow;
+    group.appendChild(verifyBtn);
+  }
   const time = document.createElement('div');
   time.className = 'msg-time';
   time.textContent = timeLabel(m.ts);
   group.appendChild(time);
   return group;
+}
+
+function askHowDoYouKnow() {
+  if (document.getElementById('sendBtn').disabled) return;
+  document.getElementById('chatInput').value = "How do you know that? What could I check to make sure it's right?";
+  sendMessage();
 }
 
 async function sendMessage() {

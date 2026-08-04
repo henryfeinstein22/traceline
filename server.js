@@ -118,6 +118,7 @@ const LITERACY_TIPS = {
     "Asking clear questions helps me give better answers — try telling me exactly what you want to know!",
     "I don't remember you between chats unless someone shows me — that's different from how people remember things.",
     "If I help you pick something, remember — YOU are the one who knows what you like best!",
+    "Try this: ask me the same question again but in different words. If I say something different, that's your cue to check with a grown-up or a book!",
   ],
   middle: [
     "AI tip: I generate answers by predicting likely-helpful text, not by \"knowing\" facts the way a search engine looks them up — so it's always worth double-checking anything important.",
@@ -125,6 +126,7 @@ const LITERACY_TIPS = {
     "AI tip: I can sound confident even when I'm wrong — that's called a \"hallucination.\" Always verify facts that matter with a trusted source.",
     "AI tip: using me to help you think through a problem builds your skills more than just asking for the final answer.",
     "AI tip: I can help you weigh options, but I don't know things about your life that matter — like how tired you are or what you promised a friend. You make the call.",
+    "AI tip: try tapping \"How do you know that?\" under one of my answers — asking me to explain my reasoning, or checking with a second source, catches mistakes a lot better than just trusting the first answer.",
   ],
   high: [
     "AI tip: I predict text based on patterns in training data — that's different from reasoning the way a person does, even when the output looks similar.",
