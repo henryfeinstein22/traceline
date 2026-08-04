@@ -5,100 +5,207 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Traceline — AI your kid can use, that shows its work</title>
 <link rel="stylesheet" href="style.css">
+<style>
+  body { background: var(--panel); }
+  .lp-topbar-wrap { border-bottom: 1px solid var(--line); }
+  .lp-topbar-wrap .wrap { padding-top: 18px; padding-bottom: 18px; }
+  .lp-topbar-wrap .topbar { margin-bottom: 0; }
+
+  .lp-hero { background: radial-gradient(circle at 15% 20%, var(--accent-soft) 0%, transparent 45%), radial-gradient(circle at 85% 0%, var(--decide-soft) 0%, transparent 40%), var(--bg); padding: 64px 0 56px; }
+  .lp-hero .wrap { max-width: 820px; }
+  .lp-hero .eyebrow { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); text-transform: uppercase; font-weight: 700; margin: 0 0 14px; }
+  .lp-hero h1 { margin: 0 0 18px; font-size: 44px; font-weight: 800; line-height: 1.1; letter-spacing: -0.01em; }
+  .lp-hero p.lede { margin: 0 0 28px; color: var(--ink-soft); font-size: 17px; max-width: 62ch; line-height: 1.6; }
+  .lp-hero-ctas { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .lp-hero-ctas .btn { padding: 13px 26px; font-size: 15px; }
+  .lp-hero-ctas .lp-secondary-link { font-size: 14px; color: var(--ink-soft); text-decoration: none; border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+  .lp-hero-ctas .lp-secondary-link:hover { color: var(--ink); border-color: var(--ink); }
+
+  .lp-mock-chat { margin-top: 44px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 32px rgba(22, 35, 46, 0.08); max-width: 480px; overflow: hidden; }
+  .lp-mock-chat .lp-mock-top { padding: 10px 16px; background: var(--decide-soft); font-size: 12px; font-weight: 700; color: var(--decide); }
+  .lp-mock-chat .lp-mock-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .lp-mock-chat .lp-mb { max-width: 82%; padding: 9px 13px; border-radius: 13px; font-size: 13.5px; line-height: 1.4; }
+  .lp-mock-chat .lp-mb.kid { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 3px; }
+  .lp-mock-chat .lp-mb.ai { align-self: flex-start; background: #f0f3f4; color: var(--ink); border-bottom-left-radius: 3px; }
+
+  section { padding: 56px 0; }
+  .lp-section-head { max-width: 60ch; margin-bottom: 32px; }
+  .lp-section-head .eyebrow { font-size: 12px; letter-spacing: 0.06em; color: var(--ink-faint); text-transform: uppercase; font-weight: 700; margin: 0 0 8px; }
+  .lp-section-head h2 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.01em; }
+  .lp-section-head p { margin: 10px 0 0; color: var(--ink-soft); font-size: 15px; }
+
+  .lp-feature-list { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 32px; }
+  .lp-feature-row { display: flex; gap: 14px; padding: 18px 0; border-top: 1px solid var(--line); }
+  .lp-feature-row .icon { font-size: 22px; flex-shrink: 0; width: 32px; }
+  .lp-feature-row h3 { margin: 0 0 4px; font-size: 15px; }
+  .lp-feature-row p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.5; }
+
+  .lp-stats-band { background: var(--ink); color: #fff; }
+  .lp-stats-band .lp-section-head .eyebrow { color: #9db3c2; }
+  .lp-stats-band .lp-section-head h2 { color: #fff; }
+  .lp-stats-band .lp-section-head p { color: #b9c6cf; }
+  .lp-stats-band .lp-section-head a { color: #8fd6c4; }
+  .lp-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .lp-stat { border-left: 2px solid #8fd6c4; padding-left: 18px; }
+  .lp-stat .v { font-size: 40px; font-weight: 800; color: #8fd6c4; line-height: 1; margin-bottom: 10px; }
+  .lp-stat p { margin: 0; font-size: 13.5px; color: #cdd8de; line-height: 1.55; }
+  .lp-stats-note { margin: 32px 0 0; font-size: 13px; color: #8ea0aa; max-width: 60ch; }
+
+  .lp-cta-band { background: var(--accent-soft); }
+  .lp-cta-inner { display: flex; justify-content: space-between; align-items: center; gap: 24px; flex-wrap: wrap; }
+  .lp-cta-inner h2 { margin: 0 0 6px; font-size: 24px; }
+  .lp-cta-inner p { margin: 0; color: var(--ink-soft); font-size: 14px; max-width: 46ch; }
+
+  .lp-interest { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; padding-top: 40px; border-top: 1px solid var(--line); margin-top: 40px; }
+  .lp-interest > div:first-child { flex: 1; min-width: 240px; }
+  .lp-interest h3 { margin: 0 0 4px; font-size: 15px; }
+  .lp-interest p { margin: 0; font-size: 13px; color: var(--ink-soft); }
+  .lp-interest-form { display: flex; gap: 8px; flex-wrap: wrap; }
+  .lp-interest-form input { width: 220px; }
+
+  footer.lp-footer { background: var(--bg); border-top: 1px solid var(--line); padding: 28px 0 48px; }
+  footer.lp-footer .note { max-width: 70ch; }
+
+  @media (max-width: 720px) {
+    .lp-hero h1 { font-size: 32px; }
+    .lp-feature-list { grid-template-columns: 1fr; }
+    .lp-stat-grid { grid-template-columns: 1fr; gap: 24px; }
+    .lp-cta-inner { flex-direction: column; align-items: flex-start; }
+    section { padding: 40px 0; }
+  }
+</style>
 </head>
 <body>
-<div class="wrap">
-  <div class="topbar">
-    <a class="brand" href="index.html"><span class="mark"></span>Traceline</a>
-    <nav>
-      <a href="parent.html">Parent dashboard</a>
-      <a href="kid.html">Open kid chat</a>
-      <a href="teacher.html">Teacher view</a>
-    </nav>
-  </div>
 
-  <header class="hero">
+<div class="lp-topbar-wrap">
+  <div class="wrap">
+    <div class="topbar">
+      <a class="brand" href="index.html"><span class="mark"></span>Traceline</a>
+      <nav>
+        <a href="parent.html">Parent dashboard</a>
+        <a href="kid.html">Open kid chat</a>
+        <a href="teacher.html">Teacher view</a>
+      </nav>
+    </div>
+  </div>
+</div>
+
+<section class="lp-hero">
+  <div class="wrap">
     <p class="eyebrow">Teaching kids to use AI well, not just supervising them</p>
     <h1>The AI your kid uses, that also teaches them how AI works.</h1>
-    <p>Age-banded for elementary through middle school: a Socratic tutor for homework, a thinking partner for everyday decisions and routines, real-time safety flags for parents, and periodic AI-literacy tips built right into the chat — why AI can be wrong, how to ask better questions, what it means to "hallucinate." Not detection after the fact. Visibility and teaching from the start.</p>
-  </header>
+    <p class="lede">A Socratic tutor for homework, a thinking partner for everyday decisions, real-time safety flags for parents, and AI-literacy tips built right into the chat — why AI can be wrong, how to ask better questions, what it means to "hallucinate." Not detection after the fact. Visibility and teaching from the start.</p>
+    <div class="lp-hero-ctas">
+      <a class="btn" href="parent.html">Set up a family →</a>
+      <a class="lp-secondary-link" href="#why-now">See the research behind it</a>
+    </div>
 
-  <div class="feature-grid">
-    <div class="feature">
-      <div class="icon">🎓</div>
-      <h3>Built-in AI literacy</h3>
-      <p>Every few messages, a short age-appropriate tip teaches how AI actually works — not a supervision feature, the actual point.</p>
-    </div>
-    <div class="feature">
-      <div class="icon">🧒</div>
-      <h3>Scales with age</h3>
-      <p>Elementary kids get simple, friendly guidance. Middle schoolers get real AI-literacy concepts. Same product, different depth.</p>
-    </div>
-    <div class="feature">
-      <div class="icon">🧭</div>
-      <h3>Decisions &amp; routines</h3>
-      <p>Beyond homework: a mode for everyday choices and planning — the AI asks questions and lays out tradeoffs, but never decides for them. Practicing that habit matters: most of Gen Alpha will be comfortable letting AI make routine decisions for them within a few years.</p>
-    </div>
-    <div class="feature">
-      <div class="icon">🛡️</div>
-      <h3>Parent visibility</h3>
-      <p>Every message your kid sends and every AI reply is logged and safety-checked in real time. No black box.</p>
-    </div>
-    <div class="feature">
-      <div class="icon">📝</div>
-      <h3>Homework provenance</h3>
-      <p>Turn on homework mode and the conversation becomes a shareable draft trail — proof of process, not just a final essay.</p>
-    </div>
-    <div class="feature">
-      <div class="icon">🚩</div>
-      <h3>Real-time flags</h3>
-      <p>Risky patterns (self-harm language, personal info sharing, dangerous requests) are flagged the moment they happen.</p>
-    </div>
-    <div class="feature">
-      <div class="icon">🔗</div>
-      <h3>Shareable with teachers</h3>
-      <p>Send a read-only provenance link for any homework conversation — the same evidence academic-integrity reviews already ask for.</p>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>Why now, not later</h2>
-    <p style="margin-top:0; color:var(--ink-soft); font-size:14px;">This isn't a bet on a hypothetical future — it's tracked, live, and updated as new evidence comes in at <a href="https://signal-broker-production.up.railway.app" target="_blank">Signal Broker</a>, a structured forecasting tool built alongside this product:</p>
-    <div class="feature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin: 16px 0;">
-      <div class="feature">
-        <div class="v" style="font-size:28px; font-weight:700; color:var(--accent);">90%</div>
-        <p style="margin-top:6px;">Gen Alpha teens show measurably higher day-to-day AI reliance than Gen Z did, by 2028 — already confirmed accelerating: 86% of kids 9-17 use AI now, up from 72% a year ago.</p>
-      </div>
-      <div class="feature">
-        <div class="v" style="font-size:28px; font-weight:700; color:var(--accent);">84%</div>
-        <p style="margin-top:6px;">AI transparency/provenance tooling for products aimed at minors becomes a standard, expected feature by 2029 — 98 state bills already introduced in 2026 alone.</p>
-      </div>
-      <div class="feature">
-        <div class="v" style="font-size:28px; font-weight:700; color:var(--accent);">79%</div>
-        <p style="margin-top:6px;">A majority of Gen Alpha's oldest members are comfortable letting AI make routine decisions for them, by 2029 — the reason Traceline added a Decisions &amp; routines mode that teaches kids to think alongside AI instead of defaulting to it.</p>
+    <div class="lp-mock-chat">
+      <div class="lp-mock-top">decide &amp; plan</div>
+      <div class="lp-mock-body">
+        <div class="lp-mb kid">should i join soccer or the school play</div>
+        <div class="lp-mb ai">What sounds more fun right now — being on a team, or performing on stage? What's your schedule actually look like for each?</div>
       </div>
     </div>
-    <p class="note" style="margin-top:4px;">These numbers move as real evidence comes in — that's the point. Traceline was built directly off this research, and the research keeps tracking whether the bet was right.</p>
   </div>
+</section>
 
-  <div class="panel">
-    <h2>Get started</h2>
-    <p style="margin-top:0; color:var(--ink-soft); font-size:14px;">Create a family account, add a kid profile with consent on record, and open the kid chat to try it live.</p>
-    <a class="btn" href="parent.html">Set up a family →</a>
-  </div>
-
-  <div class="panel">
-    <h2>Not ready to set up a family yet?</h2>
-    <p style="margin-top:0; color:var(--ink-soft); font-size:14px;">Leave your email and we'll let you know as Traceline adds features — no account, no commitment.</p>
-    <div id="interestForm" style="display:flex; gap:8px; flex-wrap:wrap;">
-      <input type="text" id="interestEmail" placeholder="you@example.com" style="flex:1; min-width:200px;">
-      <button class="btn secondary" onclick="submitInterest()">Notify me</button>
+<section class="lp-features-section">
+  <div class="wrap">
+    <div class="lp-section-head">
+      <p class="eyebrow">What Traceline does</p>
+      <h2>Seven things, one product</h2>
     </div>
-    <div id="interestMsg" style="margin-top:8px; font-size:13px;"></div>
+    <div class="lp-feature-list">
+      <div class="lp-feature-row">
+        <div class="icon">🎓</div>
+        <div><h3>Built-in AI literacy</h3><p>Every few messages, a short age-appropriate tip teaches how AI actually works — not a supervision feature, the actual point.</p></div>
+      </div>
+      <div class="lp-feature-row">
+        <div class="icon">🧒</div>
+        <div><h3>Scales with age</h3><p>Elementary kids get simple, friendly guidance. Middle and high schoolers get real AI-literacy concepts. Same product, different depth.</p></div>
+      </div>
+      <div class="lp-feature-row">
+        <div class="icon">🧭</div>
+        <div><h3>Decisions &amp; routines</h3><p>A mode for everyday choices and planning — the AI asks questions and lays out tradeoffs, but never decides for the kid.</p></div>
+      </div>
+      <div class="lp-feature-row">
+        <div class="icon">🛡️</div>
+        <div><h3>Parent visibility</h3><p>Every message your kid sends and every AI reply is logged and safety-checked in real time. No black box.</p></div>
+      </div>
+      <div class="lp-feature-row">
+        <div class="icon">📝</div>
+        <div><h3>Homework provenance</h3><p>Turn on homework mode and the conversation becomes a shareable draft trail — proof of process, not just a final essay.</p></div>
+      </div>
+      <div class="lp-feature-row">
+        <div class="icon">🚩</div>
+        <div><h3>Real-time flags</h3><p>Self-harm language, personal info sharing, or dangerous requests are flagged the moment they happen — and a parent alert fires immediately.</p></div>
+      </div>
+      <div class="lp-feature-row">
+        <div class="icon">🔗</div>
+        <div><h3>Shareable with teachers</h3><p>A read-only provenance link for any homework conversation — the same evidence academic-integrity reviews already ask for.</p></div>
+      </div>
+    </div>
   </div>
+</section>
 
-  <p class="note">The AI is live (Claude Haiku) across all three chat modes. Safety flagging runs two independent layers on every message — a dedicated AI safety classifier plus keyword matching as a fallback — applied to both what the kid sends and what the AI replies. Still not a dedicated moderation API at scale, but a real second layer, not a keyword list alone. Logging, consent, dashboard, and provenance are all real and fully functional.</p>
-</div>
+<section class="lp-stats-band" id="why-now">
+  <div class="wrap">
+    <div class="lp-section-head">
+      <p class="eyebrow">Why now, not later</p>
+      <h2>This isn't a bet on a hypothetical future</h2>
+      <p>It's tracked, live, and updated as new evidence comes in at <a href="https://signal-broker-production.up.railway.app" target="_blank">Signal Broker</a>, a structured forecasting tool built alongside this product.</p>
+    </div>
+    <div class="lp-stat-grid">
+      <div class="lp-stat">
+        <div class="v">90%</div>
+        <p>Gen Alpha teens show measurably higher day-to-day AI reliance than Gen Z did, by 2028 — already confirmed accelerating: 86% of kids 9-17 use AI now, up from 72% a year ago.</p>
+      </div>
+      <div class="lp-stat">
+        <div class="v">84%</div>
+        <p>AI transparency/provenance tooling for products aimed at minors becomes a standard, expected feature by 2029 — 98 state bills already introduced in 2026 alone.</p>
+      </div>
+      <div class="lp-stat">
+        <div class="v">79%</div>
+        <p>A majority of Gen Alpha's oldest members will be comfortable letting AI make routine decisions for them, by 2029 — the reason Traceline added a Decisions &amp; routines mode that teaches kids to think alongside AI instead of defaulting to it.</p>
+      </div>
+    </div>
+    <p class="lp-stats-note">These numbers move as real evidence comes in — that's the point. Traceline was built directly off this research, and the research keeps tracking whether the bet was right.</p>
+  </div>
+</section>
+
+<section class="lp-cta-band">
+  <div class="wrap">
+    <div class="lp-cta-inner">
+      <div>
+        <h2>Try it live</h2>
+        <p>Create a family account, add a kid profile with consent on record, and open the kid chat.</p>
+      </div>
+      <a class="btn" href="parent.html">Set up a family →</a>
+    </div>
+
+    <div class="lp-interest">
+      <div>
+        <h3>Not ready to set up a family yet?</h3>
+        <p>Leave your email and we'll let you know as Traceline adds features — no account, no commitment.</p>
+      </div>
+      <div>
+        <div id="interestForm" class="lp-interest-form">
+          <input type="text" id="interestEmail" placeholder="you@example.com">
+          <button class="btn secondary" onclick="submitInterest()">Notify me</button>
+        </div>
+        <div id="interestMsg" style="margin-top:8px; font-size:13px;"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer class="lp-footer">
+  <div class="wrap">
+    <p class="note">The AI is live (Claude Haiku) across all three chat modes. Safety flagging runs two independent layers on every message — a dedicated AI safety classifier plus keyword matching as a fallback — applied to both what the kid sends and what the AI replies, with a real-time alert to the parent the moment something is flagged. Still not a dedicated moderation API at scale, but a real second layer, not a keyword list alone. Logging, consent, dashboard, and provenance are all real and fully functional.</p>
+  </div>
+</footer>
+
 <script>
 async function submitInterest() {
   const input = document.getElementById('interestEmail');
