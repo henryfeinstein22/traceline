@@ -671,6 +671,44 @@ function buildComplianceReport(familyId, db) {
   };
 }
 
+// --- Data export / deletion: a parent can pull everything Traceline has on
+// their family, or permanently delete all of it. No session/token auth
+// exists anywhere in this app, so deletion requires re-entering the
+// passphrase in the request body as the confirmation step, same trust
+// model as login.
+app.get('/api/family/:familyId/export', (req, res) => {
+  const db = readDB();
+  const family = db.families.find(f => f.id === req.params.familyId);
+  if (!family) return res.status(404).json({ error: 'family not found' });
+  const kids = db.kids.filter(k => k.familyId === family.id);
+  const kidIds = new Set(kids.map(k => k.id));
+  const conversations = db.conversations.filter(c => kidIds.has(c.kidId));
+  res.setHeader('Content-Disposition', `attachment; filename="${family.familyName.replace(/[^a-z0-9]/gi, '_')}_traceline_export.json"`);
+  res.json({
+    exportedAt: Date.now(),
+    family: { id: family.id, familyName: family.familyName, email: family.email || null, createdAt: family.createdAt },
+    kids: kids.map(k => ({ id: k.id, name: k.name, age: k.age, consentAt: k.consentAt, createdAt: k.createdAt, classroomId: k.classroomId || null })),
+    conversations,
+  });
+});
+
+app.delete('/api/family/:familyId', (req, res) => {
+  const { passphrase } = req.body || {};
+  if (!passphrase) return res.status(400).json({ error: 'passphrase confirmation is required to delete all data' });
+  withDBLock(() => {
+    const db = readDB();
+    const family = db.families.find(f => f.id === req.params.familyId);
+    if (!family) return res.status(404).json({ error: 'family not found' });
+    if (family.passHash !== hash(passphrase)) return res.status(401).json({ error: 'incorrect passphrase' });
+    const kidIds = new Set(db.kids.filter(k => k.familyId === family.id).map(k => k.id));
+    db.conversations = db.conversations.filter(c => !kidIds.has(c.kidId));
+    db.kids = db.kids.filter(k => k.familyId !== family.id);
+    db.families = db.families.filter(f => f.id !== family.id);
+    writeDB(db);
+    res.json({ deleted: true });
+  });
+});
+
 app.get('/api/family/:familyId/compliance-report', (req, res) => {
   const db = readDB();
   const report = buildComplianceReport(req.params.familyId, db);

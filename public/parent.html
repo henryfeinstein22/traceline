@@ -116,6 +116,16 @@
       <h2>Conversations</h2>
       <div id="convosList"><p class="empty">Select a kid to view their conversations.</p></div>
     </div>
+
+    <div class="panel">
+      <h2>Your data</h2>
+      <p style="margin-top:0; color:var(--ink-soft); font-size:14px;">Everything Traceline has for this family — kid profiles, consent records, and every logged conversation.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <a class="btn secondary" id="exportLink" href="#">Export all data (JSON) →</a>
+        <button class="btn secondary" style="border-color:var(--warn); color:var(--warn);" onclick="deleteAllData()">Delete everything</button>
+      </div>
+      <div id="deleteMsg" class="error-msg"></div>
+    </div>
   </div>
 </div>
 
@@ -188,6 +198,28 @@ function signOut() {
   document.getElementById('authView').style.display = 'block';
 }
 
+async function deleteAllData() {
+  const msg = document.getElementById('deleteMsg');
+  msg.textContent = '';
+  const confirmed = window.confirm(
+    'This permanently deletes every kid profile, consent record, and conversation for "' + familyName + '". This cannot be undone. Continue?'
+  );
+  if (!confirmed) return;
+  const passphrase = window.prompt('Re-enter your passphrase to confirm deletion:');
+  if (!passphrase) return;
+  try {
+    const res = await fetch('/api/family/' + familyId, {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ passphrase }),
+    });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.error || 'failed'); }
+    signOut();
+    alert('All data for that family has been deleted.');
+  } catch (e) {
+    msg.textContent = e.message;
+  }
+}
+
 let alertPollTimer = null;
 
 async function showDash() {
@@ -195,6 +227,7 @@ async function showDash() {
   document.getElementById('dashView').style.display = 'block';
   document.getElementById('familyTitle').textContent = familyName;
   document.getElementById('complianceLink').href = 'compliance-report.html?id=' + familyId;
+  document.getElementById('exportLink').href = '/api/family/' + familyId + '/export';
   await loadOverview();
   await checkAlerts();
   if (alertPollTimer) clearInterval(alertPollTimer);
