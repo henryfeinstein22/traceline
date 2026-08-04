@@ -235,6 +235,12 @@ function buildMessageEl(m) {
     div.innerHTML = '<span class="tip-label">💡 AI TIP</span>' + esc(m.content);
     return div;
   }
+  if (m.role === 'crisis') {
+    const div = document.createElement('div');
+    div.className = 'msg crisis';
+    div.innerHTML = '<span class="tip-label">💙 SUPPORT</span>' + renderMarkup(m.content);
+    return div;
+  }
   const group = document.createElement('div');
   group.className = 'msg-group ' + m.role;
   if (m.role === 'assistant') {

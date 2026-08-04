@@ -104,6 +104,7 @@ input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, te
 .msg.assistant { background: #f0f3f4; color: var(--ink); border-bottom-left-radius: 4px; }
 .msg.flagged { border: 2px solid var(--warn); }
 .msg.tip { align-self: center; background: #fff8e6; color: #7a5c00; border: 1px solid #f0dfa0; font-size: 13px; max-width: 90%; }
+.msg.crisis { align-self: center; background: #eef5fb; color: #1c4a68; border: 1px solid #bcdcef; font-size: 14px; max-width: 95%; line-height: 1.6; white-space: pre-line; }
 .tip-label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 3px; }
 @keyframes msg-in {
   from { opacity: 0; transform: translateY(6px); }

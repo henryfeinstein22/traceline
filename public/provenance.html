@@ -63,7 +63,7 @@ async function load() {
   }
   trail.innerHTML = c.messages.map(m => `
     <div class="provenance-msg">
-      <span class="who">${m.role === 'kid' ? 'Student' : m.role === 'tip' ? 'AI literacy tip' : 'AI assistant'}</span>
+      <span class="who">${m.role === 'kid' ? 'Student' : m.role === 'tip' ? 'AI literacy tip' : m.role === 'crisis' ? 'Support message shown to student' : 'AI assistant'}</span>
       <span class="ts"> — ${new Date(m.ts).toLocaleString()}</span>
       ${m.flagged ? '<span class="badge flag">flagged</span>' : ''}
       <p>${renderMarkup(m.content)}</p>

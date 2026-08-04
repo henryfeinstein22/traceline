@@ -60,9 +60,9 @@ function newId(prefix) {
 // replaces a dedicated moderation API (OpenAI moderation endpoint, Perspective
 // API) at real scale, but this is a real second layer, not just a keyword list.
 const FLAG_PATTERNS = [
-  { re: /\b(kill myself|suicide|want to die|don'?t want to (be alive|live|be here)|not want to (be alive|live|be here)|hurt myself|self.?harm|end it all|better off dead|no reason to live|no point (in living|living))\b/i, reason: 'possible self-harm language' },
-  { re: /\b(my address is|my phone number is|my password is|meet me at)\b/i, reason: 'possible personal info sharing' },
-  { re: /\b(gun|weapon|bomb)\b.{0,30}\b(how to|make|build)\b/i, reason: 'possible dangerous request' },
+  { re: /\b(kill myself|suicide|want to die|don'?t want to (be alive|live|be here)|not want to (be alive|live|be here)|hurt myself|self.?harm|end it all|better off dead|no reason to live|no point (in living|living))\b/i, reason: 'possible self-harm language', category: 'self_harm' },
+  { re: /\b(my address is|my phone number is|my password is|meet me at)\b/i, reason: 'possible personal info sharing', category: 'personal_info' },
+  { re: /\b(gun|weapon|bomb)\b.{0,30}\b(how to|make|build)\b/i, reason: 'possible dangerous request', category: 'dangerous_content' },
 ];
 
 // A regex over the AI's own response ("trusted adult", "talk to a parent")
@@ -77,9 +77,9 @@ const FLAG_PATTERNS = [
 
 function checkSafety(text) {
   for (const p of FLAG_PATTERNS) {
-    if (p.re.test(text)) return { flagged: true, reason: p.reason };
+    if (p.re.test(text)) return { flagged: true, reason: p.reason, category: p.category };
   }
-  return { flagged: false, reason: null };
+  return { flagged: false, reason: null, category: null };
 }
 
 // Second, independent detection layer: a dedicated Claude classification pass,
@@ -88,7 +88,7 @@ function checkSafety(text) {
 // keyword list structurally can't. Runs alongside checkSafety() rather than
 // replacing it — if the API errors, checkSafety's regex is still the floor.
 async function classifySafety(text) {
-  if (!anthropic) return { flagged: false, reason: null };
+  if (!anthropic) return { flagged: false, reason: null, category: null };
   const system = `You are a safety classifier for messages inside a kids' AI chat app (ages roughly 6-17). Classify the given message for real risk signals: self-harm or suicidal language (even indirect, misspelled, or euphemistic), sharing of personal identifying information (home address, phone number, password, a plan to meet someone), or a request for instructions to make or use a weapon/dangerous device. Do NOT flag normal age-appropriate conversation, schoolwork, or clearly fictional/hypothetical discussion (e.g. a book report on a war, a video game question). Respond with ONLY a JSON object and nothing else: {"flagged": boolean, "category": "self_harm" | "personal_info" | "dangerous_content" | "none", "reason": "short reason, empty string if not flagged"}`;
   try {
     const resp = await anthropic.messages.create({
@@ -107,10 +107,11 @@ async function classifySafety(text) {
     return {
       flagged: !!parsed.flagged,
       reason: parsed.flagged ? (parsed.reason || parsed.category || 'flagged by safety classifier') : null,
+      category: parsed.flagged ? (parsed.category || null) : null,
     };
   } catch (e) {
     console.error('Safety classifier error:', e.message);
-    return { flagged: false, reason: null };
+    return { flagged: false, reason: null, category: null };
   }
 }
 
@@ -533,6 +534,7 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   ]);
   const userRegex = checkSafety(text);
   const userFlagged = userRegex.flagged || userClassifier.flagged;
+  const userCategory = userClassifier.flagged ? userClassifier.category : userRegex.category;
   const userMsg = { role: 'kid', content: text, ts: Date.now(), flagged: userFlagged, flagReason: userRegex.reason || userClassifier.reason };
   convo.messages.push(userMsg);
 
@@ -543,8 +545,22 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
     userMsg.flagReason = aiClassifier.reason;
   }
   const aiFlagged = aiRegex.flagged || aiClassifier.flagged;
+  const aiCategory = aiClassifier.flagged ? aiClassifier.category : aiRegex.category;
   const aiMsg = { role: 'assistant', content: aiText, ts: Date.now(), flagged: aiFlagged, flagReason: aiRegex.reason || aiClassifier.reason };
   convo.messages.push(aiMsg);
+
+  // A flagged message used to only change what the PARENT sees, later. If the
+  // signal is specifically self-harm, the kid should see support right now,
+  // in the moment — not just have it silently logged for someone else to
+  // maybe notice. This never blocks or replaces the AI's own reply.
+  let crisisMsg = null;
+  if (userCategory === 'self_harm' || aiCategory === 'self_harm') {
+    crisisMsg = {
+      role: 'crisis', ts: Date.now(), flagged: false, flagReason: null,
+      content: "I noticed this might mean you're going through something really hard — you don't have to handle it alone.\n\nYou can talk to someone right now:\n- Call or text 988 (Suicide & Crisis Lifeline) — free, 24/7\n- Text HOME to 741741 (Crisis Text Line)\n\nA trusted adult connected to this account will also see this. If you're in immediate danger, please call 911 or go to your nearest emergency room.",
+    };
+    convo.messages.push(crisisMsg);
+  }
 
   let tipMsg = null;
   const tipText = maybeGetLiteracyTip(convo, band);
@@ -555,7 +571,7 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   }
 
   writeDB(db);
-  res.json({ userMsg, aiMsg, tipMsg });
+  res.json({ userMsg, aiMsg, crisisMsg, tipMsg });
 
   if (userMsg.flagged && kid) {
     const family = db.families.find(f => f.id === kid.familyId);
