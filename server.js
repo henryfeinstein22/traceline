@@ -104,9 +104,12 @@ function checkSafety(text) {
 // phrasings; this catches indirect/misspelled/context-dependent risk that a
 // keyword list structurally can't. Runs alongside checkSafety() rather than
 // replacing it — if the API errors, checkSafety's regex is still the floor.
-async function classifySafety(text) {
+async function classifySafety(text, speaker = 'kid') {
   if (!anthropic) return { flagged: false, reason: null, category: null };
-  const system = `You are a safety classifier for messages inside a kids' AI chat app (ages roughly 6-17). Classify the given message for real risk signals: self-harm or suicidal language (even indirect, misspelled, or euphemistic), sharing of personal identifying information (home address, phone number, password, a plan to meet someone), or a request for instructions to make or use a weapon/dangerous device. Do NOT flag normal age-appropriate conversation, schoolwork, or clearly fictional/hypothetical discussion (e.g. a book report on a war, a video game question). Respond with ONLY a JSON object and nothing else: {"flagged": boolean, "category": "self_harm" | "personal_info" | "dangerous_content" | "none", "reason": "short reason, empty string if not flagged"}`;
+  const speakerNote = speaker === 'assistant'
+    ? `This message is from the AI ASSISTANT itself (not the kid, and not an unknown adult) — its own reply inside this same app. The assistant is deliberately warm, curious, and asks follow-up questions about the kid's interests by design (a documented, intentional product behavior, not concealment). Do NOT flag ordinary warmth, curiosity, or "what do you like to do" style follow-up questions as a grooming or predatory pattern — that heuristic does not apply to the app's own disclosed, parent-monitored AI. Only flag this message for the three categories below if it contains one of those specific things itself.`
+    : `This message is from the KID using the app.`;
+  const system = `You are a safety classifier for messages inside a kids' AI chat app (ages roughly 6-17). ${speakerNote} Classify the given message for exactly these risk signals — nothing else: self-harm or suicidal language (even indirect, misspelled, or euphemistic), sharing of personal identifying information (home address, phone number, password, a plan to meet someone), or a request for instructions to make or use a weapon/dangerous device. Do NOT flag normal age-appropriate conversation, schoolwork, ordinary friendliness, or clearly fictional/hypothetical discussion (e.g. a book report on a war, a video game question). Respond with ONLY a JSON object and nothing else: {"flagged": boolean, "category": "self_harm" | "personal_info" | "dangerous_content" | "none", "reason": "short reason, empty string if not flagged"}`;
   try {
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -570,7 +573,7 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   // itself, so pushing beforehand would send it to the model twice as
   // consecutive turns.
   const [userClassifier, aiText] = await Promise.all([
-    classifySafety(text),
+    classifySafety(text, 'kid'),
     getAIResponse(text, mode, contextConvo.messages, band),
   ]);
   const userRegex = checkSafety(text);
@@ -578,7 +581,7 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   const userCategory = userClassifier.flagged ? userClassifier.category : userRegex.category;
   const userMsg = { role: 'kid', content: text, ts: Date.now(), flagged: userFlagged, flagReason: userRegex.reason || userClassifier.reason };
 
-  const aiClassifier = await classifySafety(aiText);
+  const aiClassifier = await classifySafety(aiText, 'assistant');
   const aiRegex = checkSafety(aiText);
   if (aiClassifier.flagged && !userMsg.flagged) {
     userMsg.flagged = true;
