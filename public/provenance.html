@@ -9,7 +9,7 @@
 <body>
 <div class="wrap">
   <div class="topbar">
-    <a class="brand" href="index.html">Traceline</a>
+    <a class="brand" href="index.html"><span class="mark"></span>Traceline</a>
   </div>
 
   <header class="hero" style="margin-bottom:16px;">
@@ -43,9 +43,10 @@ async function load() {
   if (!res.ok) { document.getElementById('convoTitle').textContent = 'Record not found'; return; }
   const c = await res.json();
   document.getElementById('convoTitle').textContent = c.title;
+  const mode = c.mode || (c.homeworkMode ? 'homework' : 'general');
+  const modeLabel = mode === 'homework' ? 'Homework record · ' : mode === 'decision' ? 'Decision & planning record · ' : '';
   document.getElementById('convoMeta').textContent =
-    (c.homeworkMode ? 'Homework record · ' : '') +
-    c.messages.length + ' messages · started ' + new Date(c.createdAt).toLocaleString();
+    modeLabel + c.messages.length + ' messages · started ' + new Date(c.createdAt).toLocaleString();
 
   const trail = document.getElementById('trail');
   if (c.messages.length === 0) {

@@ -68,10 +68,13 @@ function checkSafety(text) {
 }
 
 // --- Stub AI: used only when no ANTHROPIC_API_KEY is configured. --------
-function stubAIResponse(userText, homeworkMode) {
+function stubAIResponse(userText, mode) {
   const t = userText.toLowerCase();
-  if (homeworkMode) {
+  if (mode === 'homework') {
     return `[demo AI] Here's a starting point for your assignment: break "${userText.slice(0, 60)}" into 3 parts - what you already know, what you need to find out, and how you'll explain it in your own words. What's the first part you want to work on?`;
+  }
+  if (mode === 'decision') {
+    return `[demo AI] Let's think it through together: what matters most to you here, and what are the couple of options you're weighing?`;
   }
   if (t.includes('?')) {
     return `[demo AI] Good question. In a real deployment this would call a real AI model — for now: what do you already think the answer might be?`;
@@ -89,16 +92,19 @@ function ageBand(age) {
 
 const SYSTEM_PROMPTS = {
   elementary: {
-    homework: `You are the AI helper inside Traceline, talking to a young elementary school kid (roughly ages 6-10). Use very simple words and short sentences (1-2 sentences per turn). Act like a friendly guide: ask one simple question at a time to help them think, don't just give answers. Use fun comparisons to things kids know (animals, toys, food). Never produce anything that wouldn't be appropriate for a young child.`,
-    general: `You are the AI helper inside Traceline, chatting with a young elementary school kid (roughly ages 6-10). Use very simple, warm, short sentences. Be encouraging and curious. Never produce anything that wouldn't be appropriate for a young child. If they ask about something risky or grown-up, gently suggest they ask a parent.`,
+    homework: `You are the AI helper inside Traceline, talking to a young elementary school kid (roughly ages 6-10). Use very simple words and short sentences (1-2 sentences per turn). Act like a friendly guide: ask one simple question at a time to help them think, don't just give answers. Use fun comparisons to things kids know (animals, toys, food). Celebrate their ideas ("Nice thinking!") before asking the next question. Never produce anything that wouldn't be appropriate for a young child.`,
+    general: `You are the AI helper inside Traceline, chatting with a young elementary school kid (roughly ages 6-10). Use very simple, warm, short sentences. Be genuinely curious about what they're into, and ask a fun follow-up question when it fits naturally. Never produce anything that wouldn't be appropriate for a young child. If they ask about something risky or grown-up, gently suggest they ask a parent.`,
+    decision: `You are the AI helper inside Traceline, helping a young elementary school kid (roughly ages 6-10) think through an everyday choice or routine — like what to do first, how to organize their backpack, or picking between two fun options. Ask simple questions about what they want and why. Offer a couple of simple options in plain words, but always let THEM make the final choice — never decide for them. For anything big or about safety, gently say a grown-up should help. Keep it playful and short.`,
   },
   middle: {
     homework: `You are the AI assistant inside Traceline, a homework-help chat for a middle-school-age student (roughly 11-13). Act as a Socratic tutor: help them think it through step by step rather than handing over answers. Keep responses concise (2-4 sentences), age-appropriate, and encouraging. Never produce content that wouldn't be appropriate in a school setting.`,
-    general: `You are the AI assistant inside Traceline, a safe chat app for a middle-school-age student (roughly 11-13). Be warm, concise (2-4 sentences), and age-appropriate. Never produce content that wouldn't be appropriate for a child. If asked about something risky, gently suggest they talk to a parent or trusted adult.`,
+    general: `You are the AI assistant inside Traceline, a safe chat app for a middle-school-age student (roughly 11-13). Be warm, concise (2-4 sentences), and age-appropriate — genuinely curious about what they're interested in, with a natural follow-up question when it fits. Never produce content that wouldn't be appropriate for a child. If asked about something risky, gently suggest they talk to a parent or trusted adult.`,
+    decision: `You are the AI assistant inside Traceline, helping a middle-school-age student (roughly 11-13) think through an everyday decision or plan a routine — like managing homework time, picking an activity, or organizing a task. Act as a thinking partner: ask what matters most to them, lay out the tradeoffs of a couple options, and encourage them to make the final call themselves — you're here to help them think clearly, not to decide for them. Keep responses concise (2-4 sentences) and encouraging. If the decision involves something risky or something a parent should weigh in on, say so.`,
   },
   high: {
     homework: `You are the AI assistant inside Traceline, a homework-help chat for a school-age kid. Act as a Socratic tutor: help the student think it through, don't just hand them the answer. Break problems into smaller steps, ask guiding questions, and only give a direct answer if they're clearly stuck after trying. Keep responses short (2-4 sentences), age-appropriate, and encouraging. Never produce content that wouldn't be appropriate in a school setting.`,
-    general: `You are the AI assistant inside Traceline, a safe chat app for a school-age kid. Be warm, concise (2-4 sentences), and age-appropriate. Never produce content that wouldn't be appropriate for a child: no violence, no sexual content, no instructions for anything dangerous. If asked about something risky or something an adult should know about, gently suggest they talk to a parent or trusted adult.`,
+    general: `You are the AI assistant inside Traceline, a safe chat app for a school-age kid. Be warm, concise (2-4 sentences), and age-appropriate — genuinely curious, with a natural follow-up question when it fits. Never produce content that wouldn't be appropriate for a child: no violence, no sexual content, no instructions for anything dangerous. If asked about something risky or something an adult should know about, gently suggest they talk to a parent or trusted adult.`,
+    decision: `You are the AI assistant inside Traceline, helping a school-age student think through a decision or plan a routine — like time management, choosing between commitments, or organizing a task. Be a thinking partner: ask clarifying questions, lay out real tradeoffs, and let them reach their own conclusion — the goal is building their decision-making skill, not replacing it. Keep responses concise (2-4 sentences). Flag when something is big enough that a parent or trusted adult should be involved.`,
   },
 };
 
@@ -111,17 +117,20 @@ const LITERACY_TIPS = {
     "I can make mistakes sometimes, just like anyone learning something new. It's smart to check big facts with a grown-up or a book.",
     "Asking clear questions helps me give better answers — try telling me exactly what you want to know!",
     "I don't remember you between chats unless someone shows me — that's different from how people remember things.",
+    "If I help you pick something, remember — YOU are the one who knows what you like best!",
   ],
   middle: [
     "AI tip: I generate answers by predicting likely-helpful text, not by \"knowing\" facts the way a search engine looks them up — so it's always worth double-checking anything important.",
     "AI tip: the more specific your question, the more useful my answer will be. Compare \"tell me about history\" to \"what caused World War 1 to start\" — which do you think gets a better answer?",
     "AI tip: I can sound confident even when I'm wrong — that's called a \"hallucination.\" Always verify facts that matter with a trusted source.",
     "AI tip: using me to help you think through a problem builds your skills more than just asking for the final answer.",
+    "AI tip: I can help you weigh options, but I don't know things about your life that matter — like how tired you are or what you promised a friend. You make the call.",
   ],
   high: [
     "AI tip: I predict text based on patterns in training data — that's different from reasoning the way a person does, even when the output looks similar.",
     "AI tip: I can be confidently wrong (a \"hallucination\"). For anything that matters — a grade, a fact in an essay, a decision — verify with a primary source.",
     "AI tip: how you prompt me changes the answer a lot. Specific, well-scoped questions get better results than vague ones.",
+    "AI tip: using AI to think through a decision is different from using AI to make the decision for you. The habit of deciding for yourself is a skill worth keeping.",
   ],
 };
 
@@ -135,10 +144,10 @@ function maybeGetLiteracyTip(convo, band) {
   return available[0];
 }
 
-async function getAIResponse(userText, homeworkMode, priorMessages, band) {
+async function getAIResponse(userText, mode, priorMessages, band) {
   const prompts = SYSTEM_PROMPTS[band] || SYSTEM_PROMPTS.middle;
-  const system = homeworkMode ? prompts.homework : prompts.general;
-  if (!anthropic) return stubAIResponse(userText, homeworkMode);
+  const system = prompts[mode] || prompts.general;
+  if (!anthropic) return stubAIResponse(userText, mode);
 
   const history = priorMessages.filter(m => m.role !== 'tip').slice(-10).map(m => ({
     role: m.role === 'kid' ? 'user' : 'assistant',
@@ -293,16 +302,20 @@ app.get('/api/classrooms/:id/aggregate', (req, res) => {
 });
 
 // --- Conversations / messages ----------------------------------------------
+const CHAT_MODES = ['general', 'homework', 'decision'];
+
 app.post('/api/kids/:kidId/conversations', (req, res) => {
-  const { title, homeworkMode } = req.body || {};
+  const { title, mode } = req.body || {};
   const db = readDB();
   const kid = db.kids.find(k => k.id === req.params.kidId);
   if (!kid) return res.status(404).json({ error: 'kid not found' });
+  const resolvedMode = CHAT_MODES.includes(mode) ? mode : 'general';
   const convo = {
     id: newId('conv'),
     kidId: kid.id,
     title: title || 'New chat',
-    homeworkMode: !!homeworkMode,
+    mode: resolvedMode,
+    homeworkMode: resolvedMode === 'homework',
     createdAt: Date.now(),
     messages: [],
   };
@@ -331,12 +344,13 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   if (!convo) return res.status(404).json({ error: 'not found' });
   const kid = db.kids.find(k => k.id === convo.kidId);
   const band = ageBand(kid ? kid.age : null);
+  const mode = convo.mode || (convo.homeworkMode ? 'homework' : 'general');
 
   const userSafety = checkSafety(text);
   const userMsg = { role: 'kid', content: text, ts: Date.now(), flagged: userSafety.flagged, flagReason: userSafety.reason };
   convo.messages.push(userMsg);
 
-  const aiText = await getAIResponse(text, convo.homeworkMode, convo.messages, band);
+  const aiText = await getAIResponse(text, mode, convo.messages, band);
   const aiSafety = checkSafety(aiText);
   const escalated = AI_ESCALATION_SIGNS.test(aiText);
   if (escalated && !userMsg.flagged) {

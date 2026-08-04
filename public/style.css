@@ -9,6 +9,8 @@
   --accent-soft: #e1f2ee;
   --warn: #b5581f;
   --warn-soft: #fbe9dc;
+  --decide: #4a3fae;
+  --decide-soft: #ebe8fb;
   --sans: -apple-system, 'Inter', 'Helvetica Neue', Arial, sans-serif;
 }
 * { box-sizing: border-box; }
@@ -28,7 +30,8 @@ header.hero h1 { margin: 0 0 12px; font-size: 32px; font-weight: 700; line-heigh
 header.hero p { margin: 0; color: var(--ink-soft); font-size: 16px; max-width: 60ch; }
 
 .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-.topbar .brand { font-weight: 700; font-size: 15px; color: var(--ink); text-decoration: none; }
+.topbar .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; color: var(--ink); text-decoration: none; }
+.topbar .brand .mark { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, var(--accent), var(--decide)); flex-shrink: 0; }
 .topbar nav a { font-size: 13px; color: var(--ink-soft); text-decoration: none; margin-left: 16px; }
 .topbar nav a:hover { color: var(--ink); }
 
@@ -88,12 +91,22 @@ input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, te
 .chat-topbar { padding: 14px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; background: var(--accent-soft); }
 .chat-topbar .title { font-weight: 700; font-size: 15px; }
 .chat-messages { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
-.msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 15px; overflow-wrap: break-word; word-break: break-word; }
-.msg.kid { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
-.msg.assistant { align-self: flex-start; background: #f0f3f4; color: var(--ink); border-bottom-left-radius: 4px; }
+.msg-group { display: flex; flex-direction: column; max-width: 80%; animation: msg-in 0.2s ease-out; }
+.msg-group.kid { align-self: flex-end; align-items: flex-end; }
+.msg-group.assistant { align-self: flex-start; align-items: flex-start; }
+.msg-sender { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--ink-faint); margin-bottom: 3px; padding: 0 2px; }
+.msg-sender .dot { width: 13px; height: 13px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), var(--decide)); flex-shrink: 0; }
+.msg-time { font-size: 10px; color: var(--ink-faint); margin-top: 3px; padding: 0 2px; }
+.msg { padding: 10px 14px; border-radius: 14px; font-size: 15px; overflow-wrap: break-word; word-break: break-word; }
+.msg.kid { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.msg.assistant { background: #f0f3f4; color: var(--ink); border-bottom-left-radius: 4px; }
 .msg.flagged { border: 2px solid var(--warn); }
 .msg.tip { align-self: center; background: #fff8e6; color: #7a5c00; border: 1px solid #f0dfa0; font-size: 13px; max-width: 90%; }
 .tip-label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 3px; }
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .chat-input-row { display: flex; gap: 8px; padding: 14px; border-top: 1px solid var(--line); }
 .chat-input-row input { flex: 1; }
 
@@ -119,6 +132,7 @@ input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, te
 .badge { font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
 .badge.flag { background: var(--warn-soft); color: var(--warn); }
 .badge.hw { background: var(--accent-soft); color: var(--accent); }
+.badge.decide { background: var(--decide-soft); color: var(--decide); }
 
 .empty { color: var(--ink-faint); font-size: 14px; padding: 16px 0; }
 .note { font-size: 13px; color: var(--ink-faint); margin-top: 10px; line-height: 1.6; }

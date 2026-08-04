@@ -9,7 +9,7 @@
 <body>
 <div class="wrap">
   <div class="topbar">
-    <a class="brand" href="index.html">Traceline</a>
+    <a class="brand" href="index.html"><span class="mark"></span>Traceline</a>
     <nav>
       <a href="index.html">About</a>
       <a href="kid.html">Open kid chat</a>
@@ -248,13 +248,15 @@ async function loadConvos(kidId, kidName) {
   }
   convos.forEach(c => {
     const flagCount = c.messages.filter(m => m.flagged).length;
+    const mode = c.mode || (c.homeworkMode ? 'homework' : 'general');
+    const modeBadge = mode === 'homework' ? '<span class="badge hw">homework</span> ' : mode === 'decision' ? '<span class="badge decide">decide &amp; plan</span> ' : '';
     const div = document.createElement('div');
     div.className = 'convo-row';
     div.innerHTML = `
       <div class="convo-top">
         <span class="convo-title">${esc(c.title)}</span>
         <span>
-          ${c.homeworkMode ? '<span class="badge hw">homework</span> ' : ''}
+          ${modeBadge}
           ${flagCount > 0 ? `<span class="badge flag">${flagCount} flagged</span>` : ''}
         </span>
       </div>

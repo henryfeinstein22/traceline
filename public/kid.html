@@ -9,7 +9,7 @@
 <body>
 <div class="wrap">
   <div class="topbar">
-    <a class="brand" href="index.html">Traceline</a>
+    <a class="brand" href="index.html"><span class="mark"></span>Traceline</a>
     <nav><a href="parent.html">Parent dashboard</a></nav>
   </div>
 
@@ -46,11 +46,16 @@
       <details style="margin-top:12px;" open>
         <summary style="cursor:pointer; font-size:13px; color:var(--ink-soft);">+ start a new chat</summary>
         <div style="margin-top:14px;">
-          <div class="field"><label for="newTitle">What's this chat about?</label><input type="text" id="newTitle" placeholder="e.g. Science project on volcanoes"></div>
-          <div class="check-row">
-            <input type="checkbox" id="hwToggle">
-            <label for="hwToggle" style="margin:0;">This is for homework — keep a record I can share with my teacher showing how I worked through it.</label>
+          <div class="field">
+            <label>What kind of chat is this?</label>
+            <div class="tabs" id="modeTabs">
+              <button type="button" class="mode-btn active" onclick="setMode('general', this)">Just chatting</button>
+              <button type="button" class="mode-btn" onclick="setMode('homework', this)">Homework help</button>
+              <button type="button" class="mode-btn" onclick="setMode('decision', this)">Decide &amp; plan</button>
+            </div>
+            <p class="note" id="modeCaption" style="margin-top:8px; margin-bottom:0;"></p>
           </div>
+          <div class="field"><label for="newTitle">Give it a short title</label><input type="text" id="newTitle" placeholder="e.g. Science project on volcanoes"></div>
           <button class="btn" onclick="startConvo()">Start chat</button>
         </div>
       </details>
@@ -66,6 +71,7 @@
       <div class="chat-topbar">
         <span class="title" id="chatTopbarTitle"></span>
         <span id="hwBadge" class="badge hw" style="display:none;">homework — logged for provenance</span>
+        <span id="decideBadge" class="badge decide" style="display:none;">decide &amp; plan</span>
       </div>
       <div class="chat-messages" id="chatMessages"></div>
       <div class="chat-input-row">
@@ -78,11 +84,26 @@
 </div>
 
 <script>
-let familyId = null, familyName = null, kidId = null, kidName = null, convoId = null, homeworkMode = false;
+let familyId = null, familyName = null, kidId = null, kidName = null, convoId = null, convoMode = 'general';
+let newConvoMode = 'general';
+
+const MODE_INFO = {
+  general: { label: null, caption: 'A regular chat — not saved as a homework record.' },
+  homework: { label: 'homework — logged for provenance', caption: 'Keeps a shareable record showing how you worked through it, so you can share it with a teacher.' },
+  decision: { label: 'decide & plan', caption: "Helps you think through a choice or plan a routine — Traceline won't decide for you, just help you think it through." },
+};
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+
+function setMode(mode, btn) {
+  newConvoMode = mode;
+  document.querySelectorAll('#modeTabs .mode-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('modeCaption').textContent = MODE_INFO[mode].caption;
+}
+document.getElementById('modeCaption').textContent = MODE_INFO.general.caption;
 
 async function findFamily() {
   const name = document.getElementById('famNameInput').value.trim();
@@ -144,28 +165,30 @@ async function loadConvosForKid() {
   convos.forEach(c => {
     const div = document.createElement('div');
     div.className = 'convo-row';
-    div.innerHTML = `<div class="convo-top"><span class="convo-title">${esc(c.title)}</span>${c.homeworkMode ? '<span class="badge hw">homework</span>' : ''}</div><div class="convo-meta">${c.messages.length} messages</div>`;
-    div.addEventListener('click', () => openChat(c.id, c.title, c.homeworkMode));
+    const mode = c.mode || (c.homeworkMode ? 'homework' : 'general');
+    const badge = mode === 'homework' ? '<span class="badge hw">homework</span>' : mode === 'decision' ? '<span class="badge decide">decide &amp; plan</span>' : '';
+    div.innerHTML = `<div class="convo-top"><span class="convo-title">${esc(c.title)}</span>${badge}</div><div class="convo-meta">${c.messages.length} messages</div>`;
+    div.addEventListener('click', () => openChat(c.id, c.title, mode));
     el.appendChild(div);
   });
 }
 
 async function startConvo() {
   const title = document.getElementById('newTitle').value.trim() || 'New chat';
-  const hw = document.getElementById('hwToggle').checked;
   const res = await fetch('/api/kids/' + kidId + '/conversations', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, homeworkMode: hw }),
+    body: JSON.stringify({ title, mode: newConvoMode }),
   });
   const convo = await res.json();
-  openChat(convo.id, convo.title, convo.homeworkMode);
+  openChat(convo.id, convo.title, convo.mode);
 }
 
-function openChat(id, title, hw) {
-  convoId = id; homeworkMode = hw;
+function openChat(id, title, mode) {
+  convoId = id; convoMode = mode || 'general';
   document.getElementById('chatTitle').textContent = title;
   document.getElementById('chatTopbarTitle').textContent = title;
-  document.getElementById('hwBadge').style.display = hw ? 'inline-block' : 'none';
+  document.getElementById('hwBadge').style.display = convoMode === 'homework' ? 'inline-block' : 'none';
+  document.getElementById('decideBadge').style.display = convoMode === 'decision' ? 'inline-block' : 'none';
   document.getElementById('convoPicker').style.display = 'none';
   document.getElementById('chatView').style.display = 'block';
   loadMessages();
@@ -183,20 +206,41 @@ async function loadMessages() {
   renderMessages(convo.messages);
 }
 
+function timeLabel(ts) {
+  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
 function renderMessages(messages) {
   const el = document.getElementById('chatMessages');
   el.innerHTML = '';
-  messages.forEach(m => {
-    const div = document.createElement('div');
-    div.className = 'msg ' + m.role + (m.flagged ? ' flagged' : '');
-    if (m.role === 'tip') {
-      div.innerHTML = '<span class="tip-label">💡 AI TIP</span>' + m.content;
-    } else {
-      div.textContent = m.content;
-    }
-    el.appendChild(div);
-  });
+  messages.forEach(m => el.appendChild(buildMessageEl(m)));
   el.scrollTop = el.scrollHeight;
+}
+
+function buildMessageEl(m) {
+  if (m.role === 'tip') {
+    const div = document.createElement('div');
+    div.className = 'msg tip';
+    div.innerHTML = '<span class="tip-label">💡 AI TIP</span>' + esc(m.content);
+    return div;
+  }
+  const group = document.createElement('div');
+  group.className = 'msg-group ' + m.role;
+  if (m.role === 'assistant') {
+    const sender = document.createElement('div');
+    sender.className = 'msg-sender';
+    sender.innerHTML = '<span class="dot"></span> Traceline AI';
+    group.appendChild(sender);
+  }
+  const bubble = document.createElement('div');
+  bubble.className = 'msg ' + m.role + (m.flagged ? ' flagged' : '');
+  bubble.textContent = m.content;
+  group.appendChild(bubble);
+  const time = document.createElement('div');
+  time.className = 'msg-time';
+  time.textContent = timeLabel(m.ts);
+  group.appendChild(time);
+  return group;
 }
 
 async function sendMessage() {
@@ -210,10 +254,7 @@ async function sendMessage() {
   // Optimistic: show the kid's message immediately, then a typing indicator,
   // instead of a silent pause while the real AI call is in flight.
   const el = document.getElementById('chatMessages');
-  const kidDiv = document.createElement('div');
-  kidDiv.className = 'msg kid';
-  kidDiv.textContent = text;
-  el.appendChild(kidDiv);
+  el.appendChild(buildMessageEl({ role: 'kid', content: text, ts: Date.now(), flagged: false }));
   const typingDiv = document.createElement('div');
   typingDiv.className = 'msg assistant typing';
   typingDiv.id = 'typingIndicator';
